@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}{{ process.name }}{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="crumbs" aria-label="Ścieżka">
+  <a href="{% url 'process_list' %}">Procesy</a>
+  <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+  <span class="current">{{ process.name }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+  <div class="min-w-0">
+    <p class="eyebrow">{{ process.code|default:"proces" }}</p>
+    <h1>{{ process.name }}</h1>
+    <p class="lead">{{ process.description|default:"Brak opisu procesu." }}</p>
+  </div>
+  <div class="flex items-center gap-2 shrink-0">
+    <a class="btn ghost" href="{% url 'process_edit' process.pk %}">Edytuj</a>
+    <a class="btn primary" href="{% url 'operation_create' process.pk %}">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+      Dodaj operację
+    </a>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Operacje procesu</h2>
+    <span class="pill">{{ process.operations.all|length }} pozycji</span>
+  </div>
+  {% if process.operations.all %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="w-28">Kolejność</th>
+            <th>Nazwa</th>
+            <th>Opis</th>
+            <th class="text-right">Akcje</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for operation in process.operations.all %}
+            <tr>
+              <td>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono font-semibold text-slate-700 w-5">{{ operation.order }}</span>
+                  <form method="post" action="{% url 'operation_move' operation.pk 'up' %}">
+                    {% csrf_token %}<button class="grid place-items-center h-6 w-6 rounded border border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer" title="Wyżej" type="submit">↑</button>
+                  </form>
+                  <form method="post" action="{% url 'operation_move' operation.pk 'down' %}">
+                    {% csrf_token %}<button class="grid place-items-center h-6 w-6 rounded border border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer" title="Niżej" type="submit">↓</button>
+                  </form>
+                </div>
+              </td>
+              <td><a class="font-medium text-primary hover:underline" href="{{ operation.get_absolute_url }}">{{ operation.name }}</a></td>
+              <td class="text-slate-500">{{ operation.description|truncatechars:120|default:"—" }}</td>
+              <td>
+                <div class="flex items-center justify-end gap-2">
+                  <a class="btn ghost small" href="{{ operation.get_absolute_url }}">Otwórz</a>
+                  <a class="btn primary small" href="{% url 'operation_video_upload' operation.pk %}">Analizuj film</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state compact">
+      <p>Ten proces nie ma jeszcze operacji.</p>
+      <a class="btn primary" href="{% url 'operation_create' process.pk %}">Dodaj operację</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

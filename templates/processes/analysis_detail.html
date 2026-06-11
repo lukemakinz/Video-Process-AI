@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% load process_tags %}
+
+{% block title %}Wynik analizy{% endblock %}
+
+{% block content %}
+{% include "processes/_stepper.html" with current=3 %}
+
+<section class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+  <div>
+    <p class="eyebrow">Krok 3 z 3</p>
+    <h1>Wynik analizy</h1>
+    <p class="lead">{{ analysis.video.operation.process.name }} / {{ analysis.video.operation.name }}</p>
+  </div>
+  {% include "processes/_status_badge.html" with code=analysis.status label=analysis.get_status_display big=True %}
+</section>
+
+<!-- KPI + koszt -->
+<section class="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-6">
+  <div class="card p-4">
+    <p class="text-xs uppercase tracking-wide text-slate-400">Czas nagrania</p>
+    <p class="font-mono text-2xl font-semibold text-slate-900 mt-1 tnum">{{ summary.video_duration|seconds_label }}</p>
+  </div>
+  <div class="card p-4">
+    <p class="text-xs uppercase tracking-wide text-slate-400">Praca operatora</p>
+    <p class="font-mono text-2xl font-semibold text-slate-900 mt-1 tnum">{{ summary.operator|seconds_label }}</p>
+  </div>
+  <div class="card p-4">
+    <p class="text-xs uppercase tracking-wide text-slate-400">Praca maszyny</p>
+    <p class="font-mono text-2xl font-semibold text-slate-900 mt-1 tnum">{{ summary.machine|seconds_label }}</p>
+  </div>
+  {% if cost %}
+    <div class="card p-4 border-accent-100 bg-accent-50">
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-xs uppercase tracking-wide text-accent-700">Szacowany koszt</p>
+        {% if cost.is_estimated %}<span class="text-[10px] font-semibold uppercase text-accent-700/70" title="Brak realnych danych o tokenach – wartość szacowana z długości wideo">szacunek</span>{% endif %}
+      </div>
+      <p class="font-mono text-2xl font-semibold text-accent-700 mt-1 tnum">${{ cost.usd }}</p>
+      <p class="font-mono text-xs text-accent-700/80 tnum">≈ {{ cost.pln }} zł</p>
+    </div>
+  {% else %}
+    <div class="card p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-400">Szacowany koszt</p>
+      <p class="font-mono text-2xl font-semibold text-slate-300 mt-1">—</p>
+      <p class="text-xs text-slate-400">Uruchom analizę ponownie</p>
+    </div>
+  {% endif %}
+</section>
+
+<!-- drugorzędne metryki -->
+<section class="grid gap-3 grid-cols-3 mb-6">
+  <div class="card p-3 text-center">
+    <p class="text-xs text-slate-400">Chodzenie</p>
+    <p class="font-mono text-lg font-semibold text-slate-700 tnum">{{ summary.walking|seconds_label }}</p>
+  </div>
+  <div class="card p-3 text-center">
+    <p class="text-xs text-slate-400">Oczekiwanie</p>
+    <p class="font-mono text-lg font-semibold text-slate-700 tnum">{{ summary.waiting|seconds_label }}</p>
+  </div>
+  <div class="card p-3 text-center">
+    <p class="text-xs text-slate-400">Niepewne</p>
+    <p class="font-mono text-lg font-semibold text-slate-700 tnum">{{ summary.uncertain|seconds_label }}</p>
+  </div>
+</section>
+
+<div class="grid gap-6 lg:grid-cols-3">
+  <!-- wideo + prompt -->
+  <div class="lg:col-span-2 space-y-6">
+    <section class="panel mb-0">
+      <div class="panel-head"><h2>Wideo po anonimizacji</h2></div>
+      {% if analysis.video.anonymized_file %}
+        <video id="analysis-video" class="w-full rounded-lg border border-slate-200 bg-black aspect-video" controls src="{{ analysis.video.anonymized_file.url }}"></video>
+      {% endif %}
+      <details class="mt-4 group">
+        <summary class="cursor-pointer text-sm font-medium text-slate-600 hover:text-primary select-none">Prompt wysłany do Gemini</summary>
+        <pre class="mt-2 rounded-lg bg-slate-900 text-slate-100 text-xs font-mono p-4 overflow-x-auto whitespace-pre-wrap">{{ analysis.prompt }}</pre>
+      </details>
+    </section>
+  </div>
+
+  <!-- szczegóły kosztu / modelu -->
+  <aside class="space-y-6">
+    <section class="panel mb-0">
+      <div class="panel-head"><h2>Szczegóły analizy</h2></div>
+      <dl class="divide-y divide-slate-100 text-sm">
+        <div class="flex justify-between py-2"><dt class="text-slate-500">Model</dt><dd class="font-mono text-slate-800">{{ analysis.model_name|default:"—" }}</dd></div>
+        {% if cost %}
+          <div class="flex justify-between py-2"><dt class="text-slate-500">Tokeny wejściowe</dt><dd class="font-mono text-slate-800 tnum">{{ cost.input_tokens }}</dd></div>
+          <div class="flex justify-between py-2"><dt class="text-slate-500">Tokeny wyjściowe</dt><dd class="font-mono text-slate-800 tnum">{{ cost.output_tokens }}</dd></div>
+          <div class="flex justify-between py-2"><dt class="text-slate-500">Koszt (USD)</dt><dd class="font-mono font-semibold text-accent-700 tnum">${{ cost.usd }}</dd></div>
+          <div class="flex justify-between py-2"><dt class="text-slate-500">Koszt (PLN, kurs {{ cost.rate }})</dt><dd class="font-mono text-slate-800 tnum">{{ cost.pln }} zł</dd></div>
+        {% endif %}
+        <div class="flex justify-between py-2"><dt class="text-slate-500">Segmentów</dt><dd class="font-mono text-slate-800 tnum">{{ analysis.segments.count }}</dd></div>
+      </dl>
+      {% if cost.is_estimated %}
+        <p class="help mt-3">Koszt szacowany na podstawie długości wideo i cennika z ustawień — nie pochodzi z realnego rozliczenia API.</p>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+
+<!-- gantt -->
+<section class="panel mt-6">
+  <div class="panel-head">
+    <div>
+      <h2>Oś czasu czynności</h2>
+      <p class="muted text-sm mt-1">Kliknij segment, aby przeskoczyć do tego momentu w nagraniu.</p>
+    </div>
+    <span class="pill">{{ analysis.segments.count }} wykrytych</span>
+  </div>
+  <div class="gantt">
+    <div class="gantt-scale">
+      <span>00:00</span>
+      <span>{{ summary.timeline_duration|seconds_time }}</span>
+    </div>
+    {% for row in summary.gantt_rows %}
+      <div class="gantt-row">
+        <div class="gantt-label">
+          <strong>{{ row.name }}</strong>
+          <span>{{ row.duration|seconds_label }}</span>
+        </div>
+        <div class="gantt-track">
+          {% for bar in row.bars %}
+            <button type="button" class="gantt-bar" style="left: {{ bar.left }}; width: {{ bar.width }};"
+              onclick="seekTo({{ bar.start_seconds|js_number }})"
+              title="{{ row.name }}: {{ bar.start_seconds|seconds_time }}-{{ bar.end_seconds|seconds_time }} / pewność {{ bar.confidence|confidence_percent }}">
+              <span>{{ bar.start_seconds|seconds_time }}–{{ bar.end_seconds|seconds_time }}</span>
+            </button>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- tabela segmentów -->
+<section class="panel">
+  <div class="panel-head"><h2>Lista segmentów</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="text-right">Od</th>
+          <th class="text-right">Do</th>
+          <th class="text-right">Czas</th>
+          <th>Czynność</th>
+          <th>Pewność</th>
+          <th>Uzasadnienie</th>
+          <th class="text-right">Akcje</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for segment, form in segment_forms %}
+          <tr id="segment-{{ segment.pk }}">
+            <td class="text-right font-mono text-slate-600">{{ segment.start_seconds|seconds_time }}</td>
+            <td class="text-right font-mono text-slate-600">{{ segment.end_seconds|seconds_time }}</td>
+            <td class="text-right font-mono text-slate-600">{{ segment.duration_seconds|seconds_label }}</td>
+            <td><span class="font-medium text-slate-800">{{ segment.activity_name }}</span></td>
+            <td><span class="conf {{ segment.confidence|confidence_level }}">{{ segment.confidence|confidence_percent }}</span></td>
+            <td class="text-slate-500 max-w-xs">{{ segment.reason|default:"—" }}</td>
+            <td class="text-right"><button class="btn ghost small" type="button" onclick="seekTo({{ segment.start_seconds|js_number }})">Skocz</button></td>
+          </tr>
+          <tr>
+            <td colspan="7" class="!py-0">
+              <details class="group">
+                <summary class="cursor-pointer text-xs font-medium text-primary hover:underline select-none py-2">Popraw segment</summary>
+                <form method="post" action="{% url 'segment_update' analysis.pk segment.pk %}" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-slate-50 rounded-lg p-4 mb-2">
+                  {% csrf_token %}
+                  {% for field in form %}
+                    <div class="field compact-field {% if field.name == 'reason' %}sm:col-span-2 lg:col-span-3{% endif %}">
+                      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                      {{ field }}
+                      {% for error in field.errors %}<p class="error">{{ error }}</p>{% endfor %}
+                    </div>
+                  {% endfor %}
+                  <div class="sm:col-span-2 lg:col-span-3">
+                    <button class="btn primary small" type="submit">Zapisz korektę</button>
+                  </div>
+                </form>
+              </details>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- udział czasowy czynności -->
+<section class="panel">
+  <div class="panel-head"><h2>Czasy czynności</h2></div>
+  <div class="activity-bars">
+    {% for row in summary.activity_rows %}
+      <div class="bar-row">
+        <div class="bar-label">
+          <strong>{{ row.name }}</strong>
+          <span>{{ row.duration|seconds_label }} · {{ row.percent }}%</span>
+        </div>
+        <div class="bar-track"><span style="width: {{ row.percent|pct_width }}"></span></div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function seekTo(seconds) {
+    const player = document.getElementById("analysis-video");
+    if (!player) return;
+    player.currentTime = Number(seconds);
+    player.play();
+    player.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+</script>
+{% endblock %}

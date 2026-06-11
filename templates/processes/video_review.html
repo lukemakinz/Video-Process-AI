@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load process_tags %}
+
+{% block title %}Podgląd anonimizacji{% endblock %}
+
+{% block content %}
+{% include "processes/_stepper.html" with current=2 %}
+
+<section class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+  <div>
+    <p class="eyebrow">Krok 2 z 3</p>
+    <h1>Podgląd po anonimizacji</h1>
+    <p class="lead">{{ video.operation.process.name }} / {{ video.operation.name }}</p>
+  </div>
+  {% include "processes/_status_badge.html" with code=video.status label=video.get_status_display big=True %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div class="min-w-0">
+      <h2 class="truncate">{{ video.original_filename }}</h2>
+      <p class="muted text-sm mt-1">Czas trwania: <span class="font-mono">{{ video.duration_seconds|default:"—" }}{% if video.duration_seconds %} s{% endif %}</span></p>
+    </div>
+  </div>
+
+  {% if video.anonymized_file %}
+    <video class="w-full rounded-lg border border-slate-200 bg-black aspect-video" controls src="{{ video.anonymized_file.url }}"></video>
+    <div class="note flex items-start gap-2 mt-4">
+      <svg class="h-4 w-4 text-primary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
+      <span>Do Gemini zostanie wysłany <strong>wyłącznie ten zanonimizowany plik</strong>. {{ video.anonymization_error }}</span>
+    </div>
+    {% if not latest_analysis %}
+      <form method="post" action="{% url 'video_approve_and_analyze' video.pk %}" class="flex flex-wrap items-center gap-2 mt-5 pt-5 border-t border-slate-100">
+        {% csrf_token %}
+        <button class="btn primary" type="submit">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Zatwierdź i rozpocznij analizę Gemini
+        </button>
+        <a class="btn ghost" href="{{ video.operation.get_absolute_url }}">Wróć do operacji</a>
+      </form>
+    {% else %}
+      <div class="flex flex-wrap items-center gap-2 mt-5 pt-5 border-t border-slate-100">
+        <a class="btn primary" href="{{ latest_analysis.get_absolute_url }}">Otwórz wynik analizy</a>
+        <a class="btn ghost" href="{{ video.operation.get_absolute_url }}">Wróć do operacji</a>
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="empty-state compact">
+      <span class="grid place-items-center h-10 w-10 rounded-full bg-amber-50 text-amber-600">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+      </span>
+      <h2>Brak pliku po anonimizacji</h2>
+      <p>{{ video.anonymization_error|default:"Anonimizacja nie została wykonana." }}</p>
+      <a class="btn ghost" href="{{ video.operation.get_absolute_url }}">Wróć do operacji</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,219 @@
+{% load static %}
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Analiza wideo procesu{% endblock %} · Video Process AI</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              DEFAULT: '#1E40AF', 50: '#eef2ff', 100: '#e0e7ff',
+              600: '#1E40AF', 700: '#1d3a9e', 800: '#1b338a',
+            },
+            accent: {
+              DEFAULT: '#D97706', 50: '#fffbeb', 100: '#fef3c7', 700: '#b45309',
+            },
+          },
+          fontFamily: {
+            sans: ['"Fira Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['"Fira Code"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+          },
+          maxWidth: { container: '80rem' },
+        },
+      },
+    };
+  </script>
+
+  <style type="text/tailwindcss">
+    @layer base {
+      body { @apply bg-slate-50 text-slate-800 font-sans antialiased; }
+      h1 { @apply font-mono text-2xl font-semibold tracking-tight text-slate-900; }
+      h2 { @apply font-mono text-base font-semibold tracking-tight text-slate-900; }
+      table, .tnum { font-variant-numeric: tabular-nums; }
+    }
+
+    @layer components {
+      /* --- Buttons --- */
+      .btn {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+               cursor-pointer transition-colors duration-150 select-none
+               focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1
+               disabled:opacity-50 disabled:cursor-not-allowed;
+      }
+      .btn.primary  { @apply bg-primary text-white hover:bg-primary-700 shadow-sm; }
+      .btn.secondary{ @apply bg-accent text-white hover:bg-accent-700 shadow-sm; }
+      .btn.ghost    { @apply bg-white text-slate-700 border border-slate-300 hover:bg-slate-50; }
+      .btn.danger   { @apply bg-red-600 text-white hover:bg-red-700 shadow-sm; }
+      .btn.small    { @apply px-2.5 py-1.5 text-xs rounded-md; }
+
+      /* --- Surfaces --- */
+      .card  { @apply bg-white border border-slate-200 rounded-xl shadow-sm; }
+      .panel { @apply bg-white border border-slate-200 rounded-xl shadow-sm p-5 sm:p-6 mb-6; }
+      .panel.narrow { @apply max-w-xl; }
+      .panel-head { @apply flex items-start justify-between gap-4 mb-4 pb-4 border-b border-slate-100; }
+
+      /* --- Typography helpers --- */
+      .eyebrow { @apply text-xs font-semibold uppercase tracking-wider text-primary; }
+      .lead    { @apply text-slate-500 mt-1; }
+      .muted   { @apply text-slate-500; }
+
+      /* --- Badges / pills --- */
+      .pill   { @apply inline-flex items-center rounded-full bg-primary-50 text-primary px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap; }
+      .status { @apply inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-700 px-2.5 py-0.5 text-xs font-medium; }
+      .status.big { @apply text-sm px-3 py-1; }
+
+      /* --- Forms (klasy ustawiane przez StyledFormMixin) --- */
+      .input, .select {
+        @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900
+               placeholder:text-slate-400 transition-colors
+               focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30;
+      }
+      .check-input { @apply h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 cursor-pointer; }
+      .field { @apply mb-4; }
+      .field > label { @apply block text-sm font-medium text-slate-700 mb-1.5; }
+      .field.compact-field { @apply mb-3; }
+      .help  { @apply mt-1 text-xs text-slate-400; }
+      .error { @apply mt-1 text-xs font-medium text-red-600; }
+
+      /* --- Note / callout --- */
+      .note { @apply rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 my-4; }
+
+      /* --- Tables --- */
+      .table-wrap { @apply overflow-x-auto; }
+      .table-wrap table { @apply w-full text-sm border-collapse; }
+      .table-wrap thead th {
+        @apply text-left text-xs font-semibold uppercase tracking-wide text-slate-400
+               px-3 py-2 border-b border-slate-200 bg-slate-50;
+      }
+      .table-wrap tbody td { @apply px-3 py-2.5 border-b border-slate-100 align-middle; }
+      .table-wrap tbody tr { @apply transition-colors hover:bg-slate-50; }
+
+      /* --- Empty states --- */
+      .empty-state {
+        @apply flex flex-col items-center text-center gap-3 rounded-xl border-2 border-dashed
+               border-slate-200 bg-white px-6 py-12;
+      }
+      .empty-state.compact { @apply py-8 border bg-slate-50; }
+      .empty-state h2 { @apply text-slate-900; }
+      .empty-state p  { @apply text-slate-500 max-w-md; }
+
+      /* --- Gantt timeline --- */
+      .gantt { @apply mt-2 space-y-2; }
+      .gantt-scale { @apply flex justify-between font-mono text-xs text-slate-400 mb-2 px-1; }
+      .gantt-row { @apply grid grid-cols-[9rem_1fr] sm:grid-cols-[12rem_1fr] items-center gap-3; }
+      .gantt-label { @apply flex flex-col text-sm leading-tight min-w-0; }
+      .gantt-label strong { @apply font-medium text-slate-800 truncate; }
+      .gantt-label span { @apply font-mono text-xs text-slate-400; }
+      .gantt-track { @apply relative h-8 rounded-md bg-slate-100 overflow-hidden; }
+      .gantt-bar {
+        @apply absolute top-0 h-full rounded-md bg-primary/90 hover:bg-primary
+               border border-primary-700/30 cursor-pointer transition-colors
+               flex items-center px-2 overflow-hidden;
+      }
+      .gantt-bar span { @apply font-mono text-[10px] text-white truncate; }
+
+      /* --- Activity bars --- */
+      .activity-bars { @apply space-y-3; }
+      .bar-row { @apply grid grid-cols-1 sm:grid-cols-[14rem_1fr] items-center gap-2; }
+      .bar-label { @apply flex justify-between sm:block text-sm; }
+      .bar-label strong { @apply font-medium text-slate-800; }
+      .bar-label span { @apply font-mono text-xs text-slate-400; }
+      .bar-track { @apply relative h-2.5 rounded-full bg-slate-100 overflow-hidden; }
+      .bar-track > span { @apply absolute left-0 top-0 h-full rounded-full bg-primary; }
+
+      /* --- Confidence badges --- */
+      .conf { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold font-mono; }
+      .conf.high   { @apply bg-emerald-50 text-emerald-700; }
+      .conf.medium { @apply bg-amber-50 text-amber-700; }
+      .conf.low    { @apply bg-red-50 text-red-700; }
+
+      /* --- Breadcrumbs --- */
+      .crumbs { @apply flex flex-wrap items-center gap-1.5 text-sm text-slate-400 mb-4; }
+      .crumbs a { @apply text-slate-500 hover:text-primary transition-colors; }
+      .crumbs svg { @apply h-3.5 w-3.5 text-slate-300; }
+      .crumbs .current { @apply text-slate-700 font-medium; }
+    }
+  </style>
+</head>
+<body class="min-h-dvh flex flex-col">
+  <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
+    <div class="mx-auto max-w-container px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <a class="flex items-center gap-2.5 font-mono font-semibold text-slate-900" href="{% url 'process_list' %}">
+        <span class="grid place-items-center h-9 w-9 rounded-lg bg-primary text-white text-sm shadow-sm">VP</span>
+        <span class="hidden sm:inline">Video Process <span class="text-primary">AI</span></span>
+      </a>
+      {% with path=request.path %}
+      <nav class="flex items-center gap-1 text-sm">
+        <a href="{% url 'process_list' %}"
+           class="flex items-center gap-1.5 rounded-lg px-3 py-2 font-medium transition-colors {% if path == '/' or '/processes/' in path or '/operations/' in path or '/activities/' in path %}bg-primary-50 text-primary{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 018.25 20.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25A2.25 2.25 0 0113.5 8.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/></svg>
+          <span class="hidden sm:inline">Procesy</span>
+        </a>
+        <a href="{% url 'video_upload' %}"
+           class="flex items-center gap-1.5 rounded-lg px-3 py-2 font-medium transition-colors {% if '/videos/' in path or '/analyses/' in path %}bg-primary-50 text-primary{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/></svg>
+          <span class="hidden sm:inline">Analizuj nagranie</span>
+        </a>
+        <a href="/admin/" class="flex items-center gap-1.5 rounded-lg px-3 py-2 font-medium text-slate-600 hover:bg-slate-100 transition-colors">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span class="hidden sm:inline">Admin</span>
+        </a>
+      </nav>
+      {% endwith %}
+    </div>
+  </header>
+
+  <main class="flex-1 mx-auto w-full max-w-container px-4 sm:px-6 py-6 sm:py-8">
+    {% block breadcrumbs %}{% endblock %}
+
+    {% if messages %}
+      <div class="space-y-2 mb-6" aria-live="polite">
+        {% for message in messages %}
+          {% if message.tags == 'success' %}
+            <div class="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span>{{ message }}</span>
+            </div>
+          {% elif message.tags == 'error' %}
+            <div class="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+              <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+              <span>{{ message }}</span>
+            </div>
+          {% elif message.tags == 'warning' %}
+            <div class="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
+              <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+              <span>{{ message }}</span>
+            </div>
+          {% else %}
+            <div class="flex items-start gap-3 rounded-lg border border-primary-100 bg-primary-50 px-4 py-3 text-sm text-primary-800">
+              <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>
+              <span>{{ message }}</span>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-container px-4 sm:px-6 py-4 text-xs text-slate-400 flex flex-wrap items-center justify-between gap-2">
+      <span>Video Process AI · demo analizy procesu z GenAI</span>
+      <span class="font-mono">proces → operacja → czynności → film → analiza → korekta</span>
+    </div>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

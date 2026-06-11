@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load process_tags %}
+
+{% block title %}Procesy{% endblock %}
+
+{% block content %}
+<section class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+  <div>
+    <p class="eyebrow">Demo GenAI Video</p>
+    <h1>Procesy</h1>
+    <p class="lead">Definiuj procesy, operacje i zamkniętą listę czynności, a następnie analizuj nagrania.</p>
+  </div>
+  <div class="flex items-center gap-2">
+    <a class="btn ghost" href="{% url 'video_upload' %}">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/></svg>
+      Analizuj nagranie
+    </a>
+    <a class="btn primary" href="{% url 'process_create' %}">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+      Dodaj proces
+    </a>
+  </div>
+</section>
+
+{% if processes %}
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    {% for process in processes %}
+      <article class="card p-5 flex flex-col gap-4 hover:shadow-md transition-shadow">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="eyebrow truncate">{{ process.code|default:"bez kodu" }}</p>
+            <h2 class="mt-0.5 truncate">{{ process.name }}</h2>
+          </div>
+          <span class="pill">{{ process.operation_total }} oper.</span>
+        </div>
+        <p class="text-sm text-slate-500 line-clamp-3 min-h-[3rem]">{{ process.description|default:"Brak opisu procesu." }}</p>
+        <dl class="grid grid-cols-2 gap-3 text-sm border-t border-slate-100 pt-4">
+          <div>
+            <dt class="text-xs uppercase tracking-wide text-slate-400">Utworzono</dt>
+            <dd class="font-mono text-slate-700">{{ process.created_at|date:"Y-m-d" }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs uppercase tracking-wide text-slate-400">Operacje</dt>
+            <dd class="font-mono text-slate-700">{{ process.operation_total }}</dd>
+          </div>
+        </dl>
+        <div class="flex items-center gap-2 mt-auto">
+          <a class="btn primary small flex-1" href="{{ process.get_absolute_url }}">Otwórz</a>
+          <a class="btn ghost small" href="{% url 'process_edit' process.pk %}">Edytuj</a>
+          <a class="btn ghost small text-red-600 hover:bg-red-50 hover:border-red-200" href="{% url 'process_delete' process.pk %}">Usuń</a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <span class="grid place-items-center h-12 w-12 rounded-full bg-primary-50 text-primary">
+      <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25A2.25 2.25 0 0113.5 8.25V6z"/></svg>
+    </span>
+    <h2>Brak procesów</h2>
+    <p>Dodaj pierwszy proces albo załaduj dane przykładowe poleceniem <code class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">python3 manage.py seed_demo</code>.</p>
+    <a class="btn primary" href="{% url 'process_create' %}">Dodaj proces</a>
+  </div>
+{% endif %}
+{% endblock %}

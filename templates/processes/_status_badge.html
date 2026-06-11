@@ -1,0 +1,5 @@
+{% comment %}Odznaka statusu. Parametry: code (kod statusu), label (etykieta), big (opcjonalnie).{% endcomment %}
+<span class="status {% if big %}big{% endif %} {% if code == 'completed' or code == 'approved' %}bg-emerald-50 text-emerald-700{% elif code == 'failed' %}bg-red-50 text-red-700{% elif code == 'awaiting_approval' %}bg-amber-50 text-amber-700{% elif code == 'analyzing' or code == 'anonymizing' or code == 'running' or code == 'queued' %}bg-primary-50 text-primary{% endif %}">
+  <span class="h-1.5 w-1.5 rounded-full {% if code == 'completed' or code == 'approved' %}bg-emerald-500{% elif code == 'failed' %}bg-red-500{% elif code == 'awaiting_approval' %}bg-amber-500{% elif code == 'analyzing' or code == 'anonymizing' or code == 'running' or code == 'queued' %}bg-primary{% else %}bg-slate-400{% endif %}"></span>
+  {{ label }}
+</span>
