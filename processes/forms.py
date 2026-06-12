@@ -21,7 +21,7 @@ class StyledFormMixin:
 class ProcessForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Process
-        fields = ["name", "code", "description"]
+        fields = ["name", "description"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 4}),
         }
@@ -30,7 +30,7 @@ class ProcessForm(StyledFormMixin, forms.ModelForm):
 class OperationForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Operation
-        fields = ["name", "code", "description", "order"]
+        fields = ["name", "description", "order"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 4}),
             "order": forms.NumberInput(attrs={"min": 1}),

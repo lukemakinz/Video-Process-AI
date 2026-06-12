@@ -154,3 +154,8 @@ GEMINI_USD_PLN_RATE = _float_env("GEMINI_USD_PLN_RATE", 4.00)
 # OpenAI — używane WYŁĄCZNIE do opisów czynności (analiza wideo zostaje na Gemini).
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-4o-mini")
+OPENAI_USE_MOCK = os.getenv("OPENAI_USE_MOCK", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}

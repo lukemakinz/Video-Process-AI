@@ -30,7 +30,26 @@
 
   {% for field in form.visible_fields %}
     <div class="field">
-      <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="text-red-500">*</span>{% endif %}</label>
+      <label for="{{ field.id_for_label }}">
+        <span class="inline-flex items-center gap-1.5">
+          <span>{{ field.label }}{% if field.field.required %} <span class="text-red-500">*</span>{% endif %}</span>
+          {% if field.name == 'name' %}
+            {% include "processes/_field_info_icon.html" with text="Nazwa jest główną etykietą, którą AI może przypisać do segmentu. Wpisz ją przed użyciem AI, żeby model wiedział, jaką czynność opisuje." %}
+          {% elif field.name == 'quick_description' %}
+            {% include "processes/_field_info_icon.html" with text="Robocza wskazówka dla asystenta. Nie zapisujemy jej w bazie; służy tylko do wygenerowania opisu i kryteriów." %}
+          {% elif field.name == 'description' %}
+            {% include "processes/_field_info_icon.html" with text="Ten opis trafia do promptu analizy. Powinien mówić, co realnie widać na nagraniu podczas tej czynności." %}
+          {% elif field.name == 'recognition_rules' %}
+            {% include "processes/_field_info_icon.html" with text="Warunki, po których AI ma rozpoznać tę czynność. Im bardziej konkretne sygnały wizualne, tym mniej pomyłek." %}
+          {% elif field.name == 'exclusion_rules' %}
+            {% include "processes/_field_info_icon.html" with text="Sytuacje, w których AI nie powinno wybierać tej czynności. To pomaga rozróżnić podobne kroki." %}
+          {% elif field.name == 'minimum_duration_seconds' %}
+            {% include "processes/_field_info_icon.html" with text="Minimalny sensowny czas trwania segmentu. Pomaga odsiać przypadkowe, zbyt krótkie dopasowania." %}
+          {% elif field.name == 'performed_by' %}
+            {% include "processes/_field_info_icon.html" with text="Określa, czy czas tej czynności liczy się jako praca operatora, maszyny, obu stron albo nieokreślony czas w podsumowaniu." %}
+          {% endif %}
+        </span>
+      </label>
       {{ field }}
       {% if field.name == 'description' or field.name == 'recognition_rules' or field.name == 'exclusion_rules' %}
         <button type="button"
@@ -51,6 +70,11 @@
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <p class="text-sm text-accent-700">
             <strong>Asystent AI</strong> przygotuje opis i kryteria. „Generuj" tworzy od zera, „Popraw" szlifuje obecną treść.
+            {% if not ai_available %}
+              <span class="block mt-1 text-amber-700">Konfiguracja AI nie jest wczytana przez serwer. Kliknięcie pokaże dokładny błąd; ustaw <code class="font-mono">OPENAI_API_KEY</code> w <code class="font-mono">.env</code> i zrestartuj serwer.</span>
+            {% elif ai_mock_enabled %}
+              <span class="block mt-1 text-amber-700">Włączony jest tryb demo <code class="font-mono">OPENAI_USE_MOCK=true</code>; odpowiedzi będą przykładowe, nie z modelu.</span>
+            {% endif %}
           </p>
           <div class="flex items-center gap-2">
             <button class="btn secondary small" type="submit" name="action" value="ai_suggest">

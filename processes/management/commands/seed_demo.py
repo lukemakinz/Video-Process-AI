@@ -10,7 +10,6 @@ class Command(BaseCommand):
         process, _ = Process.objects.get_or_create(
             name="Produkcja elementu A",
             defaults={
-                "code": "PE-A",
                 "description": "Proces obejmuje przygotowanie detalu, frezowanie i kontrolę.",
             },
         )

@@ -181,8 +181,10 @@ def activity_ai_field(request, operation_id):
     target = request.POST.get("target")
     if target not in {"description", "recognition_rules", "exclusion_rules"}:
         return HttpResponse("", status=400)
+    if not (request.POST.get("name") or "").strip():
+        return HttpResponse("Najpierw wpisz nazwę czynności.", status=400)
     fields = {
-        "name": request.POST.get("name", ""),
+        "name": request.POST.get("name", "").strip(),
         "quick_description": request.POST.get("quick_description", ""),
         "description": request.POST.get("description", ""),
         "recognition_rules": request.POST.get("recognition_rules", ""),
@@ -193,20 +195,38 @@ def activity_ai_field(request, operation_id):
         result = assist_activity(operation, fields, mode=mode, target=target)
         return HttpResponse(result.get(target, ""))
     except Exception as exc:
-        return HttpResponse(f"Nie udało się wygenerować pola: {exc}", status=200)
+        return HttpResponse(f"Nie udało się wygenerować pola: {exc}", status=400)
 
 
 def _activity_form(request, operation, activity=None):
     form = ActivityForm(request.POST or None, instance=activity)
     suggestion = None
+    ai_available = bool(settings.OPENAI_API_KEY) or settings.OPENAI_USE_MOCK
 
     if request.method == "POST" and request.POST.get("action") in {"ai_suggest", "ai_refine"}:
         mode = "refine" if request.POST.get("action") == "ai_refine" else "generate"
+        name = (request.POST.get("name") or "").strip()
+        if not name:
+            form.add_error("name", "Najpierw wpisz nazwę czynności, żeby AI wiedziało, co opisać.")
+            messages.error(request, "Wpisz nazwę czynności przed użyciem AI.")
+            return render(
+                request,
+                "processes/activity_form.html",
+                {
+                    "form": form,
+                    "operation": operation,
+                    "activity": activity,
+                    "suggestion": suggestion,
+                    "title": "Edytuj czynność" if activity else "Dodaj czynność",
+                    "ai_available": ai_available,
+                    "ai_mock_enabled": settings.OPENAI_USE_MOCK,
+                },
+            )
         try:
             suggestion = assist_activity(
                 operation=operation,
                 fields={
-                    "name": request.POST.get("name", ""),
+                    "name": name,
                     "quick_description": request.POST.get("quick_description", ""),
                     "description": request.POST.get("description", ""),
                     "recognition_rules": request.POST.get("recognition_rules", ""),
@@ -241,6 +261,8 @@ def _activity_form(request, operation, activity=None):
             "activity": activity,
             "suggestion": suggestion,
             "title": "Edytuj czynność" if activity else "Dodaj czynność",
+            "ai_available": ai_available,
+            "ai_mock_enabled": settings.OPENAI_USE_MOCK,
         },
     )
 

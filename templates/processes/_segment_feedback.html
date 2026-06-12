@@ -9,6 +9,7 @@
       <button type="button"
               class="btn ghost small"
               hx-post="{% url 'segment_approve' analysis.pk segment.pk %}"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
               hx-target="#seg-feedback-{{ segment.pk }}" hx-swap="outerHTML">
         👍 Dobrze
       </button>
@@ -16,6 +17,7 @@
         <summary class="btn ghost small cursor-pointer list-none">👎 Popraw</summary>
         <form class="mt-2 p-3 bg-slate-50 rounded-lg flex flex-col gap-2 w-72"
               hx-post="{% url 'segment_feedback' analysis.pk segment.pk %}"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
               hx-target="#seg-feedback-{{ segment.pk }}" hx-swap="outerHTML">
           <textarea name="note" rows="2" class="input text-xs" placeholder="np. pieprz jest ciemniejszy niż sól"></textarea>
           <select name="confused_with" class="select text-xs">

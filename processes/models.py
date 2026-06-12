@@ -14,7 +14,6 @@ class TimeStampedModel(models.Model):
 
 class Process(TimeStampedModel):
     name = models.CharField("nazwa procesu", max_length=200)
-    code = models.CharField("kod procesu", max_length=80, blank=True)
     description = models.TextField("opis procesu", blank=True)
 
     class Meta:
@@ -37,7 +36,6 @@ class Operation(TimeStampedModel):
         on_delete=models.CASCADE,
     )
     name = models.CharField("nazwa operacji", max_length=200)
-    code = models.CharField("kod operacji", max_length=80, blank=True)
     description = models.TextField("opis operacji", blank=True)
     order = models.PositiveIntegerField("kolejność", default=1)
 

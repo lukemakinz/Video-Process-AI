@@ -14,7 +14,7 @@ from .models import (
 class OperationInline(admin.TabularInline):
     model = Operation
     extra = 0
-    fields = ("order", "name", "code")
+    fields = ("order", "name")
 
 
 class ActivityInline(admin.TabularInline):
@@ -38,16 +38,16 @@ class AnalysisSegmentInline(admin.TabularInline):
 
 @admin.register(Process)
 class ProcessAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "created_at", "updated_at")
-    search_fields = ("name", "code", "description")
+    list_display = ("name", "created_at", "updated_at")
+    search_fields = ("name", "description")
     inlines = [OperationInline]
 
 
 @admin.register(Operation)
 class OperationAdmin(admin.ModelAdmin):
-    list_display = ("name", "process", "order", "code", "created_at")
+    list_display = ("name", "process", "order", "created_at")
     list_filter = ("process",)
-    search_fields = ("name", "code", "description", "process__name")
+    search_fields = ("name", "description", "process__name")
     inlines = [ActivityInline]
 
 

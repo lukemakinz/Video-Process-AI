@@ -4,6 +4,7 @@
     <select name="activity"
             class="select !py-1 !px-2 text-xs max-w-[12rem]"
             hx-post="{% url 'segment_reassign' analysis.pk segment.pk %}"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
             hx-target="#seg-activity-{{ segment.pk }}"
             hx-swap="outerHTML"
             hx-trigger="change">

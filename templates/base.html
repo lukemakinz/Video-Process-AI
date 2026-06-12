@@ -210,6 +210,14 @@
     </div>
   </footer>
 
+  <script>
+    document.body.addEventListener("htmx:configRequest", function (event) {
+      const tokenInput = document.querySelector("input[name='csrfmiddlewaretoken']");
+      if (tokenInput && tokenInput.value) {
+        event.detail.headers["X-CSRFToken"] = tokenInput.value;
+      }
+    });
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

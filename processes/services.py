@@ -1,5 +1,6 @@
 import json
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -76,6 +77,10 @@ def _full_frame_blur(input_path, output_path):
     )
 
 
+def _copy_video(input_path, output_path):
+    shutil.copyfile(input_path, output_path)
+
+
 def _opencv_face_blur(input_path, output_path):
     import cv2
 
@@ -95,6 +100,7 @@ def _opencv_face_blur(input_path, output_path):
         fps,
         (width, height),
     )
+    blurred_faces = 0
 
     while True:
         ok, frame = capture.read()
@@ -113,6 +119,7 @@ def _opencv_face_blur(input_path, output_path):
             if face_region.size:
                 blur = cv2.GaussianBlur(face_region, (99, 99), 30)
                 frame[y1:y2, x1:x2] = blur
+                blurred_faces += 1
         writer.write(frame)
 
     capture.release()
@@ -146,6 +153,7 @@ def _opencv_face_blur(input_path, output_path):
         text=True,
     )
     silent_path.unlink(missing_ok=True)
+    return blurred_faces
 
 
 def anonymize_video(video):
@@ -158,16 +166,19 @@ def anonymize_video(video):
 
     try:
         try:
-            _opencv_face_blur(input_path, output_path)
-            mode = "opencv_face_blur"
+            blurred_faces = _opencv_face_blur(input_path, output_path)
+            if blurred_faces:
+                mode = f"opencv_face_blur ({blurred_faces} wykryć twarzy)"
+            else:
+                mode = "opencv_face_blur_no_faces_detected"
         except ImportError:
-            _full_frame_blur(input_path, output_path)
-            mode = "ffmpeg_full_frame_blur_no_opencv"
-        except Exception:
+            _copy_video(input_path, output_path)
+            mode = "copy_without_full_blur_no_opencv"
+        except Exception as exc:
             if output_path.exists():
                 output_path.unlink()
-            _full_frame_blur(input_path, output_path)
-            mode = "ffmpeg_full_frame_blur_fallback"
+            _copy_video(input_path, output_path)
+            mode = f"copy_without_full_blur_fallback ({exc})"
 
         with output_path.open("rb") as handle:
             video.anonymized_file.save(output_path.name, File(handle), save=False)
@@ -175,7 +186,7 @@ def anonymize_video(video):
 
         video.status = Video.Status.AWAITING_APPROVAL
         video.anonymized_at = timezone.now()
-        video.anonymization_error = f"Tryb anonimizacji: {mode}"
+        video.anonymization_error = f"Tryb anonimizacji: {mode}. Sprawdź podgląd przed zatwierdzeniem analizy."
         video.save(
             update_fields=[
                 "anonymized_file",
@@ -358,7 +369,11 @@ def assist_activity(operation, fields, mode="generate", target=None):
     """
     client = _openai_client()
     if client is None:
-        return _assist_mock(fields, mode, target)
+        if settings.OPENAI_USE_MOCK:
+            return _assist_mock(fields, mode, target)
+        raise RuntimeError(
+            "Brak OPENAI_API_KEY. Ustaw klucz w pliku .env albo włącz OPENAI_USE_MOCK=true dla trybu demo."
+        )
 
     intent = (
         "Popraw i doszlifuj istniejący opis, zachowując intencję autora."

@@ -1,13 +1,15 @@
+import tempfile
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from .forms import VideoUploadForm
+from .forms import OperationForm, ProcessForm, VideoUploadForm
 from .models import Activity, Analysis, AnalysisSegment, Operation, Process, Video
-from .services import analysis_summary, build_analysis_prompt
+from .services import analysis_summary, anonymize_video, build_analysis_prompt
 
 
 class ProcessDemoTests(TestCase):
@@ -51,6 +53,55 @@ class ProcessDemoTests(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("Demo obsługuje tylko pliki MP4 i MOV.", form.errors["file"])
+
+    def _video_with_file(self, content=b"raw-video"):
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="input.mp4",
+            duration_seconds=Decimal("1.00"),
+        )
+        video.file.save("input.mp4", SimpleUploadedFile("input.mp4", content), save=True)
+        return video
+
+    def test_anonymize_video_copies_original_when_opencv_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=Path(tmpdir)):
+            video = self._video_with_file()
+            with (
+                patch("processes.services._opencv_face_blur", side_effect=ImportError),
+                patch("processes.services._full_frame_blur") as full_blur,
+            ):
+                anonymize_video(video)
+
+            full_blur.assert_not_called()
+            video.refresh_from_db()
+            self.assertEqual(video.status, Video.Status.AWAITING_APPROVAL)
+            self.assertIn("copy_without_full_blur_no_opencv", video.anonymization_error)
+            with video.anonymized_file.open("rb") as handle:
+                self.assertEqual(handle.read(), b"raw-video")
+
+    def test_anonymize_video_keeps_frame_when_no_faces_detected(self):
+        def no_faces(input_path, output_path):
+            Path(output_path).write_bytes(b"opencv-output")
+            return 0
+
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=Path(tmpdir)):
+            video = self._video_with_file()
+            with (
+                patch("processes.services._opencv_face_blur", side_effect=no_faces),
+                patch("processes.services._full_frame_blur") as full_blur,
+            ):
+                anonymize_video(video)
+
+            full_blur.assert_not_called()
+            video.refresh_from_db()
+            self.assertEqual(video.status, Video.Status.AWAITING_APPROVAL)
+            self.assertIn("opencv_face_blur_no_faces_detected", video.anonymization_error)
+            with video.anonymized_file.open("rb") as handle:
+                self.assertEqual(handle.read(), b"opencv-output")
+
+    def test_process_and_operation_forms_do_not_show_code_fields(self):
+        self.assertNotIn("code", ProcessForm().fields)
+        self.assertNotIn("code", OperationForm().fields)
 
     def test_analysis_summary_counts_operator_and_machine_time(self):
         video = Video.objects.create(
@@ -175,6 +226,7 @@ class ProcessDemoTests(TestCase):
 
     # --- Etap 2: asystent AI (OpenAI) ---
 
+    @override_settings(OPENAI_USE_MOCK=True, OPENAI_API_KEY="")
     def test_assist_activity_generate_returns_all_fields(self):
         from processes.services import assist_activity
         result = assist_activity(
@@ -186,6 +238,7 @@ class ProcessDemoTests(TestCase):
             self.assertIn(key, result)
         self.assertTrue(result["description"])
 
+    @override_settings(OPENAI_USE_MOCK=True, OPENAI_API_KEY="")
     def test_assist_activity_refine_preserves_input(self):
         from processes.services import assist_activity
         result = assist_activity(
@@ -195,6 +248,7 @@ class ProcessDemoTests(TestCase):
         )
         self.assertIn("kroi pomidora nożem", result["description"])
 
+    @override_settings(OPENAI_USE_MOCK=True, OPENAI_API_KEY="")
     def test_assist_activity_target_returns_single_field(self):
         from processes.services import assist_activity
         result = assist_activity(
@@ -206,6 +260,13 @@ class ProcessDemoTests(TestCase):
         self.assertIn("exclusion_rules", result)
         self.assertNotIn("description", result)
 
+    @override_settings(OPENAI_USE_MOCK=False, OPENAI_API_KEY="")
+    def test_assist_activity_requires_openai_key_unless_mock_enabled(self):
+        from processes.services import assist_activity
+        with self.assertRaisesMessage(RuntimeError, "Brak OPENAI_API_KEY"):
+            assist_activity(self.operation, {"name": "krojenie pomidora"})
+
+    @override_settings(OPENAI_USE_MOCK=True, OPENAI_API_KEY="")
     def test_activity_ai_field_returns_single_field_text(self):
         url = f"/operations/{self.operation.pk}/activities/ai-field/"
         r = self.client.post(url, {
@@ -217,6 +278,57 @@ class ProcessDemoTests(TestCase):
         body = r.content.decode()
         self.assertIn("operator wykonuje inną zdefiniowaną czynność", body)
 
+    def test_activity_ai_field_requires_activity_name(self):
+        url = f"/operations/{self.operation.pk}/activities/ai-field/"
+        r = self.client.post(url, {"target": "description", "name": ""})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Najpierw wpisz nazwę czynności", r.content.decode())
+
+    @override_settings(OPENAI_USE_MOCK=False, OPENAI_API_KEY="")
+    def test_activity_ai_field_reports_missing_openai_key(self):
+        url = f"/operations/{self.operation.pk}/activities/ai-field/"
+        r = self.client.post(url, {"target": "description", "name": "solenie kanapki"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Brak OPENAI_API_KEY", r.content.decode())
+
+    def test_activity_form_ai_requires_activity_name(self):
+        url = f"/operations/{self.operation.pk}/activities/new/"
+        r = self.client.post(url, {
+            "action": "ai_suggest",
+            "name": "",
+            "quick_description": "operator wkłada detal",
+            "performed_by": "operator",
+        })
+        self.assertEqual(r.status_code, 200)
+        body = r.content.decode()
+        self.assertIn("Najpierw wpisz nazwę czynności", body)
+        self.assertFalse(self.operation.activities.filter(name="").exists())
+
+    @override_settings(OPENAI_USE_MOCK=False, OPENAI_API_KEY="")
+    def test_activity_form_ai_buttons_remain_clickable_without_key(self):
+        url = f"/operations/{self.operation.pk}/activities/new/"
+        r = self.client.get(url)
+        body = r.content.decode()
+        self.assertIn('name="action" value="ai_suggest"', body)
+        self.assertIn('name="action" value="ai_refine"', body)
+        self.assertNotIn('value="ai_suggest"\n                    disabled', body)
+        self.assertNotIn('value="ai_refine"\n                    disabled', body)
+
+    @override_settings(OPENAI_USE_MOCK=False, OPENAI_API_KEY="")
+    def test_activity_form_ai_reports_missing_openai_key(self):
+        url = f"/operations/{self.operation.pk}/activities/new/"
+        r = self.client.post(url, {
+            "action": "ai_suggest",
+            "name": "solenie kanapki",
+            "quick_description": "operator soli kanapkę",
+            "performed_by": "operator",
+        })
+        self.assertEqual(r.status_code, 200)
+        body = r.content.decode()
+        self.assertIn("Brak OPENAI_API_KEY", body)
+        self.assertFalse(self.operation.activities.filter(name="solenie kanapki").exists())
+
+    @override_settings(OPENAI_USE_MOCK=True, OPENAI_API_KEY="")
     def test_activity_form_ai_refine_fills_fields(self):
         url = f"/operations/{self.operation.pk}/activities/new/"
         r = self.client.post(url, {
@@ -291,6 +403,8 @@ class ProcessDemoTests(TestCase):
         self.assertIn("Wymaga sprawdzenia", body)
         self.assertIn('data-start=', body)
         self.assertIn('data-end=', body)
+        self.assertIn("htmx:configRequest", body)
+        self.assertIn("X-CSRFToken", body)
 
     # --- Etap 3b: pętla informacji zwrotnej ---
 
