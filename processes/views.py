@@ -1,8 +1,10 @@
+import csv
 from decimal import Decimal
 
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count, Max
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -19,9 +21,10 @@ from .models import Activity, Analysis, Operation, Process, Video
 from .services import (
     analysis_summary,
     anonymize_video,
+    assist_activity,
     get_video_duration_seconds,
-    run_video_analysis,
-    suggest_activity_description,
+    run_analysis_in_background,
+    segments_needing_review,
 )
 
 
@@ -172,20 +175,49 @@ def activity_edit(request, pk):
     return _activity_form(request, operation=activity.operation, activity=activity)
 
 
+@require_POST
+def activity_ai_field(request, operation_id):
+    operation = get_object_or_404(Operation.objects.select_related("process"), pk=operation_id)
+    target = request.POST.get("target")
+    if target not in {"description", "recognition_rules", "exclusion_rules"}:
+        return HttpResponse("", status=400)
+    fields = {
+        "name": request.POST.get("name", ""),
+        "quick_description": request.POST.get("quick_description", ""),
+        "description": request.POST.get("description", ""),
+        "recognition_rules": request.POST.get("recognition_rules", ""),
+        "exclusion_rules": request.POST.get("exclusion_rules", ""),
+    }
+    mode = "refine" if fields.get(target) else "generate"
+    try:
+        result = assist_activity(operation, fields, mode=mode, target=target)
+        return HttpResponse(result.get(target, ""))
+    except Exception as exc:
+        return HttpResponse(f"Nie udało się wygenerować pola: {exc}", status=200)
+
+
 def _activity_form(request, operation, activity=None):
     form = ActivityForm(request.POST or None, instance=activity)
     suggestion = None
 
-    if request.method == "POST" and request.POST.get("action") == "ai_suggest":
+    if request.method == "POST" and request.POST.get("action") in {"ai_suggest", "ai_refine"}:
+        mode = "refine" if request.POST.get("action") == "ai_refine" else "generate"
         try:
-            suggestion = suggest_activity_description(
+            suggestion = assist_activity(
                 operation=operation,
-                name=request.POST.get("name", ""),
-                quick_description=request.POST.get("quick_description", ""),
+                fields={
+                    "name": request.POST.get("name", ""),
+                    "quick_description": request.POST.get("quick_description", ""),
+                    "description": request.POST.get("description", ""),
+                    "recognition_rules": request.POST.get("recognition_rules", ""),
+                    "exclusion_rules": request.POST.get("exclusion_rules", ""),
+                },
+                mode=mode,
             )
             data = request.POST.copy()
             for field_name in ("description", "recognition_rules", "exclusion_rules"):
-                data[field_name] = suggestion.get(field_name, data.get(field_name, ""))
+                if suggestion.get(field_name):
+                    data[field_name] = suggestion[field_name]
             form = ActivityForm(data, instance=activity)
             messages.info(request, "AI przygotowało propozycję. Zapisz ją dopiero po akceptacji.")
         except Exception as exc:
@@ -193,6 +225,9 @@ def _activity_form(request, operation, activity=None):
     elif request.method == "POST" and form.is_valid():
         activity_obj = form.save(commit=False)
         activity_obj.operation = operation
+        if activity is None:
+            current_max = operation.activities.aggregate(m=Max("order"))["m"] or 0
+            activity_obj.order = current_max + 1
         activity_obj.save()
         messages.success(request, "Czynność została zapisana.")
         return redirect(operation)
@@ -222,6 +257,40 @@ def activity_delete(request, pk):
         "processes/confirm_delete.html",
         {"object": activity, "title": "Usuń czynność", "cancel_url": operation.get_absolute_url()},
     )
+
+
+@require_POST
+def activity_move(request, pk, direction):
+    activity = get_object_or_404(Activity.objects.select_related("operation"), pk=pk)
+    siblings = list(activity.operation.activities.all())
+    index = siblings.index(activity)
+    target_index = index - 1 if direction == "up" else index + 1
+    if 0 <= target_index < len(siblings):
+        siblings[index], siblings[target_index] = siblings[target_index], siblings[index]
+    for position, item in enumerate(siblings, start=1):
+        if item.order != position:
+            item.order = position
+            item.save(update_fields=["order", "updated_at"])
+    return redirect(activity.operation)
+
+
+@require_POST
+def hint_toggle(request, pk):
+    from .models import ActivityHint
+
+    hint = get_object_or_404(ActivityHint, pk=pk)
+    hint.is_active = not hint.is_active
+    hint.save(update_fields=["is_active", "updated_at"])
+    return render(request, "processes/_hint_row.html", {"hint": hint})
+
+
+@require_POST
+def hint_delete(request, pk):
+    from .models import ActivityHint
+
+    hint = get_object_or_404(ActivityHint, pk=pk)
+    hint.delete()
+    return HttpResponse("")
 
 
 def video_upload(request, operation_id=None):
@@ -271,6 +340,16 @@ def video_review(request, pk):
     )
 
 
+def analysis_status(request, pk):
+    video = get_object_or_404(Video, pk=pk)
+    analysis = video.analyses.order_by("-id").first()
+    return render(
+        request,
+        "processes/_analysis_status.html",
+        {"video": video, "analysis": analysis},
+    )
+
+
 @require_POST
 def video_approve_and_analyze(request, pk):
     video = get_object_or_404(
@@ -284,15 +363,12 @@ def video_approve_and_analyze(request, pk):
         messages.error(request, "Najpierw zdefiniuj czynności dla tej operacji.")
         return redirect(video.operation)
 
-    video.status = Video.Status.APPROVED
+    video.status = Video.Status.ANALYZING
     video.approved_for_analysis_at = timezone.now()
     video.save(update_fields=["status", "approved_for_analysis_at"])
-    analysis = run_video_analysis(video)
-    if analysis.status == Analysis.Status.FAILED:
-        messages.error(request, f"Analiza nie powiodła się: {analysis.error_message}")
-    else:
-        messages.success(request, "Analiza została zakończona.")
-    return redirect(analysis)
+    run_analysis_in_background(video)
+    messages.info(request, "Analiza została uruchomiona. Wynik pojawi się automatycznie.")
+    return redirect("video_review", pk=video.pk)
 
 
 def analysis_detail(request, pk):
@@ -320,6 +396,8 @@ def analysis_detail(request, pk):
             "is_estimated": analysis.cost_is_estimated,
             "rate": rate,
         }
+    needs_review = segments_needing_review(analysis)
+    approved_count = analysis.segments.filter(is_approved=True).count()
     return render(
         request,
         "processes/analysis_detail.html",
@@ -328,6 +406,130 @@ def analysis_detail(request, pk):
             "segment_forms": segment_forms,
             "summary": analysis_summary(analysis),
             "cost": cost,
+            "needs_review": needs_review,
+            "operation": operation,
+            "approved_count": approved_count,
+        },
+    )
+
+
+@require_POST
+def analysis_approve_all(request, pk):
+    analysis = get_object_or_404(Analysis, pk=pk)
+    updated = analysis.segments.filter(is_approved=False).update(
+        is_approved=True,
+        updated_at=timezone.now(),
+    )
+    if updated:
+        messages.success(request, f"Zatwierdzono {updated} segment(y).")
+    else:
+        messages.info(request, "Wszystkie segmenty były już zatwierdzone.")
+    return redirect("analysis_detail", pk=analysis.pk)
+
+
+def analysis_export_csv(request, pk):
+    analysis = get_object_or_404(
+        Analysis.objects.select_related("video", "video__operation"),
+        pk=pk,
+    )
+    filename = f"analysis-{analysis.pk}-segments.csv"
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response.write("\ufeff")
+
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "start_seconds",
+            "end_seconds",
+            "duration_seconds",
+            "activity",
+            "confidence",
+            "is_approved",
+            "reason",
+        ]
+    )
+    for segment in analysis.segments.order_by("start_seconds", "id"):
+        writer.writerow(
+            [
+                segment.start_seconds,
+                segment.end_seconds,
+                segment.duration_seconds,
+                segment.activity_name,
+                segment.confidence,
+                "tak" if segment.is_approved else "nie",
+                segment.reason,
+            ]
+        )
+    return response
+
+
+@require_POST
+def segment_reassign(request, analysis_pk, segment_pk):
+    analysis = get_object_or_404(
+        Analysis.objects.select_related("video", "video__operation"),
+        pk=analysis_pk,
+    )
+    segment = get_object_or_404(analysis.segments, pk=segment_pk)
+    operation = analysis.video.operation
+    activity = get_object_or_404(operation.activities, pk=request.POST.get("activity"))
+    segment.activity = activity
+    segment.activity_name = activity.name
+    segment.save(update_fields=["activity", "activity_name", "updated_at"])
+    return render(
+        request,
+        "processes/_segment_activity_cell.html",
+        {"analysis": analysis, "segment": segment, "operation": operation, "saved": True},
+    )
+
+
+@require_POST
+def segment_approve(request, analysis_pk, segment_pk):
+    analysis = get_object_or_404(
+        Analysis.objects.select_related("video", "video__operation"), pk=analysis_pk
+    )
+    segment = get_object_or_404(analysis.segments, pk=segment_pk)
+    segment.is_approved = True
+    segment.save(update_fields=["is_approved", "updated_at"])
+    return render(
+        request,
+        "processes/_segment_feedback.html",
+        {"analysis": analysis, "segment": segment, "operation": analysis.video.operation},
+    )
+
+
+@require_POST
+def segment_feedback(request, analysis_pk, segment_pk):
+    from .models import ActivityHint
+
+    analysis = get_object_or_404(
+        Analysis.objects.select_related("video", "video__operation"), pk=analysis_pk
+    )
+    segment = get_object_or_404(analysis.segments, pk=segment_pk)
+    operation = analysis.video.operation
+    note = (request.POST.get("note") or "").strip()
+    confused_with = None
+    confused_id = request.POST.get("confused_with")
+    if confused_id:
+        confused_with = operation.activities.filter(pk=confused_id).first()
+    target_activity = segment.activity or confused_with
+    hint_saved = False
+    if note and target_activity is not None:
+        ActivityHint.objects.create(
+            activity=target_activity,
+            text=note,
+            confused_with=confused_with if confused_with != target_activity else None,
+            source_segment=segment,
+        )
+        hint_saved = True
+    return render(
+        request,
+        "processes/_segment_feedback.html",
+        {
+            "analysis": analysis,
+            "segment": segment,
+            "operation": operation,
+            "hint_saved": hint_saved,
         },
     )
 

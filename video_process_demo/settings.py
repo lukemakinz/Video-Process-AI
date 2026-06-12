@@ -150,3 +150,7 @@ GEMINI_PRICE_OUTPUT_PER_M = _float_env("GEMINI_PRICE_OUTPUT_PER_M", 2.50)
 GEMINI_VIDEO_TOKENS_PER_SECOND = _float_env("GEMINI_VIDEO_TOKENS_PER_SECOND", 263.0)
 # Kurs USD->PLN tylko do orientacyjnego przeliczenia w UI.
 GEMINI_USD_PLN_RATE = _float_env("GEMINI_USD_PLN_RATE", 4.00)
+
+# OpenAI — używane WYŁĄCZNIE do opisów czynności (analiza wideo zostaje na Gemini).
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-4o-mini")

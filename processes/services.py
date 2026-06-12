@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+import threading
 import time
 from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
@@ -8,7 +9,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.files import File
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -192,7 +193,7 @@ def anonymize_video(video):
 
 
 def build_analysis_prompt(operation):
-    activities = operation.activities.all()
+    activities = list(operation.activities.all())
     lines = [
         f'Analizujesz zanonimizowane nagranie operacji "{operation.name}" w procesie "{operation.process.name}".',
         "",
@@ -216,14 +217,28 @@ def build_analysis_prompt(operation):
             if activity.minimum_duration_seconds is not None
             else "brak"
         )
+        activity_lines = [
+            f"{index}. {activity.name}",
+            f"Opis: {activity.description or 'brak'}",
+            f"Rozpoznaj, gdy: {activity.recognition_rules or 'brak'}",
+            f"Nie rozpoznawaj, gdy: {activity.exclusion_rules or 'brak'}",
+            f"Minimalny czas trwania: {minimum}",
+            f"Wykonawca: {activity.get_performed_by_display()}",
+        ]
+        active_hints = list(activity.hints.filter(is_active=True))
+        if active_hints:
+            activity_lines.append("Wskazówki z wcześniejszych korekt:")
+            for hint in active_hints:
+                suffix = f" (bywa mylone z: {hint.confused_with.name})" if hint.confused_with else ""
+                activity_lines.append(f"- {hint.text}{suffix}")
+        activity_lines.append("")
+        lines.extend(activity_lines)
+    if len(activities) > 1:
+        sequence = " → ".join(activity.name for activity in activities)
         lines.extend(
             [
-                f"{index}. {activity.name}",
-                f"Opis: {activity.description or 'brak'}",
-                f"Rozpoznaj, gdy: {activity.recognition_rules or 'brak'}",
-                f"Nie rozpoznawaj, gdy: {activity.exclusion_rules or 'brak'}",
-                f"Minimalny czas trwania: {minimum}",
-                f"Wykonawca: {activity.get_performed_by_display()}",
+                f"Typowa kolejność czynności (podpowiedź, nie sztywna reguła): {sequence}.",
+                "Kolejność może się nie zachować — dozwolone są odstępstwa: czekanie, chodzenie, poprawki, powtórzenia lub pominięcia kroków.",
                 "",
             ]
         )
@@ -308,38 +323,87 @@ def _gemini_client():
     return genai.Client(api_key=settings.GEMINI_API_KEY)
 
 
-def suggest_activity_description(operation, name, quick_description):
+def _openai_client():
+    if not settings.OPENAI_API_KEY:
+        return None
+    from openai import OpenAI
+
+    return OpenAI(api_key=settings.OPENAI_API_KEY)
+
+
+def _assist_mock(fields, mode, target):
+    name = fields.get("name") or "czynność"
+    base = fields.get("description") or fields.get("quick_description") or f"{name} obserwowana w nagraniu."
+    if mode == "refine" and fields.get("description"):
+        description = f"{fields['description']} (doprecyzowano: widoczny początek i koniec czynności)."
+    else:
+        description = f"{base} Opis doprecyzowany na potrzeby segmentacji wideo."
+    full = {
+        "description": description,
+        "recognition_rules": "- widoczny jest początek i koniec czynności\n- działania odpowiadają nazwie czynności\n- obiekt lub maszyna w oczekiwanym kontekście",
+        "exclusion_rules": "- operator wykonuje inną zdefiniowaną czynność\n- obraz nie pozwala potwierdzić działania\n- widoczny jest tylko etap przygotowania lub zakończenia",
+        "possible_confusions": "- inne\n- niepewne",
+    }
+    if target:
+        return {target: full.get(target, "")}
+    return full
+
+
+def assist_activity(operation, fields, mode="generate", target=None):
+    """Asystent opisu czynności (OpenAI GPT).
+
+    fields: dict z kluczami name/quick_description/description/recognition_rules/exclusion_rules.
+    mode: 'generate' (od zera) | 'refine' (szlifowanie istniejącej treści).
+    target: jeśli podany (np. 'exclusion_rules'), zwraca tylko to jedno pole.
+    """
+    client = _openai_client()
+    if client is None:
+        return _assist_mock(fields, mode, target)
+
+    intent = (
+        "Popraw i doszlifuj istniejący opis, zachowując intencję autora."
+        if mode == "refine"
+        else "Przygotuj opis od zera."
+    )
+    scope = f"Zwróć wyłącznie pole '{target}'." if target else "Zwróć wszystkie pola."
+    schema = (
+        '{"%s": "..."}' % target
+        if target
+        else '{"description":"...","recognition_rules":"- ...","exclusion_rules":"- ...","possible_confusions":"- ..."}'
+    )
     prompt = f"""
-Jesteś asystentem inżyniera procesu. Przygotuj opis czynności do analizy wideo produkcji gniazdowej.
+Jesteś asystentem inżyniera procesu. {intent}
+Opis służy do analizy wideo produkcji gniazdowej. Pisz precyzyjnie i konkretnie.
 
 Proces: {operation.process.name}
 Operacja: {operation.name}
-Nazwa czynności: {name or "do uzupełnienia"}
-Krótki opis użytkownika: {quick_description or "brak"}
+Nazwa czynności: {fields.get('name') or 'do uzupełnienia'}
+Krótki opis: {fields.get('quick_description') or 'brak'}
+Obecny opis: {fields.get('description') or 'brak'}
+Obecne warunki rozpoznania: {fields.get('recognition_rules') or 'brak'}
+Obecne warunki wykluczenia: {fields.get('exclusion_rules') or 'brak'}
 
-Zwróć wyłącznie JSON:
-{{
-  "description": "...",
-  "recognition_rules": "- ...",
-  "exclusion_rules": "- ...",
-  "possible_confusions": "- ..."
-}}
+{scope}
+Zwróć wyłącznie JSON: {schema}
 """
-    client = _gemini_client()
-    if client is None:
-        base = quick_description or name or "Czynność obserwowana w nagraniu."
-        return {
-            "description": f"{base} Opis doprecyzowany na potrzeby segmentacji wideo.",
-            "recognition_rules": "- widoczny jest początek i koniec czynności\n- działania odpowiadają nazwie czynności\n- obiekt lub maszyna znajduje się w oczekiwanym kontekście",
-            "exclusion_rules": "- operator wykonuje inną zdefiniowaną czynność\n- obraz nie pozwala potwierdzić działania\n- widoczny jest wyłącznie etap przygotowania lub zakończenia",
-            "possible_confusions": "- inne\n- niepewne",
-        }
-
-    response = client.models.generate_content(
-        model=settings.GEMINI_TEXT_MODEL,
-        contents=prompt,
+    response = client.chat.completions.create(
+        model=settings.OPENAI_TEXT_MODEL,
+        messages=[
+            {"role": "system", "content": "Zwracasz wyłącznie poprawny JSON, bez markdown."},
+            {"role": "user", "content": prompt},
+        ],
+        response_format={"type": "json_object"},
     )
-    return _extract_json(response.text)
+    return json.loads(response.choices[0].message.content)
+
+
+def suggest_activity_description(operation, name, quick_description):
+    """Zgodność wsteczna: generowanie opisu od zera."""
+    return assist_activity(
+        operation,
+        {"name": name, "quick_description": quick_description},
+        mode="generate",
+    )
 
 
 def _mock_segments(operation, duration_seconds):
@@ -634,3 +698,28 @@ def analysis_summary(analysis):
         "waiting": totals["waiting"],
         "uncertain": totals["uncertain"],
     }
+
+
+def _analysis_worker(video_pk):
+    """Cel wątku: pobiera wideo i uruchamia analizę, domykając połączenie DB wątku."""
+    try:
+        video = Video.objects.select_related("operation", "operation__process").get(pk=video_pk)
+        run_video_analysis(video)
+    finally:
+        connection.close()
+
+
+def run_analysis_in_background(video):
+    """Startuje analizę w osobnym wątku i natychmiast zwraca (nie czeka na wynik)."""
+    thread = threading.Thread(target=_analysis_worker, args=(video.pk,), daemon=True)
+    thread.start()
+    return thread
+
+
+def segments_needing_review(analysis, threshold=0.4):
+    """Segmenty wymagające uwagi człowieka: niska pewność lub czynność 'niepewne'."""
+    flagged = []
+    for segment in analysis.segments.select_related("activity"):
+        if segment.confidence < threshold or "niepew" in segment.activity_name.casefold():
+            flagged.append(segment)
+    return flagged

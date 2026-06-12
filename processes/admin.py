@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import Activity, Analysis, AnalysisSegment, Operation, Process, Video
+from .models import (
+    Activity,
+    ActivityHint,
+    Analysis,
+    AnalysisSegment,
+    Operation,
+    Process,
+    Video,
+)
 
 
 class OperationInline(admin.TabularInline):
@@ -45,7 +53,7 @@ class OperationAdmin(admin.ModelAdmin):
 
 @admin.register(Activity)
 class ActivityAdmin(admin.ModelAdmin):
-    list_display = ("name", "operation", "performed_by", "minimum_duration_seconds")
+    list_display = ("name", "operation", "order", "performed_by", "minimum_duration_seconds")
     list_filter = ("performed_by", "operation__process")
     search_fields = ("name", "description", "recognition_rules", "exclusion_rules")
 
@@ -76,3 +84,10 @@ class AnalysisSegmentAdmin(admin.ModelAdmin):
         "is_approved",
     )
     list_filter = ("is_approved", "activity__performed_by")
+
+
+@admin.register(ActivityHint)
+class ActivityHintAdmin(admin.ModelAdmin):
+    list_display = ("activity", "text", "confused_with", "is_active", "created_at")
+    list_filter = ("is_active", "activity__operation__process")
+    search_fields = ("text", "activity__name")

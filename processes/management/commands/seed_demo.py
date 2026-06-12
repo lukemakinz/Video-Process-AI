@@ -149,8 +149,8 @@ class Command(BaseCommand):
             ),
         ]
 
-        for name, description, recognition, exclusion, performer in activities:
-            Activity.objects.get_or_create(
+        for order, (name, description, recognition, exclusion, performer) in enumerate(activities, start=1):
+            activity, _ = Activity.objects.get_or_create(
                 operation=milling,
                 name=name,
                 defaults={
@@ -158,7 +158,11 @@ class Command(BaseCommand):
                     "recognition_rules": recognition,
                     "exclusion_rules": exclusion,
                     "performed_by": performer,
+                    "order": order,
                 },
             )
+            if activity.order != order:
+                activity.order = order
+                activity.save(update_fields=["order", "updated_at"])
 
         self.stdout.write(self.style.SUCCESS("Dane demo zostały utworzone."))

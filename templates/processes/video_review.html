@@ -29,8 +29,14 @@
       <svg class="h-4 w-4 text-primary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
       <span>Do Gemini zostanie wysłany <strong>wyłącznie ten zanonimizowany plik</strong>. {{ video.anonymization_error }}</span>
     </div>
-    {% if not latest_analysis %}
-      <form method="post" action="{% url 'video_approve_and_analyze' video.pk %}" class="flex flex-wrap items-center gap-2 mt-5 pt-5 border-t border-slate-100">
+    <div class="mt-5 pt-5 border-t border-slate-100">
+    {% if latest_analysis or video.status == 'analyzing' %}
+      {% include "processes/_analysis_status.html" with video=video analysis=latest_analysis %}
+      <div class="mt-3">
+        <a class="btn ghost" href="{{ video.operation.get_absolute_url }}">Wróć do operacji</a>
+      </div>
+    {% else %}
+      <form method="post" action="{% url 'video_approve_and_analyze' video.pk %}" class="flex flex-wrap items-center gap-2">
         {% csrf_token %}
         <button class="btn primary" type="submit">
           <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -38,12 +44,8 @@
         </button>
         <a class="btn ghost" href="{{ video.operation.get_absolute_url }}">Wróć do operacji</a>
       </form>
-    {% else %}
-      <div class="flex flex-wrap items-center gap-2 mt-5 pt-5 border-t border-slate-100">
-        <a class="btn primary" href="{{ latest_analysis.get_absolute_url }}">Otwórz wynik analizy</a>
-        <a class="btn ghost" href="{{ video.operation.get_absolute_url }}">Wróć do operacji</a>
-      </div>
     {% endif %}
+    </div>
   {% else %}
     <div class="empty-state compact">
       <span class="grid place-items-center h-10 w-10 rounded-full bg-amber-50 text-amber-600">

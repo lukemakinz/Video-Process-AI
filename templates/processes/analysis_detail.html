@@ -12,8 +12,35 @@
     <h1>Wynik analizy</h1>
     <p class="lead">{{ analysis.video.operation.process.name }} / {{ analysis.video.operation.name }}</p>
   </div>
-  {% include "processes/_status_badge.html" with code=analysis.status label=analysis.get_status_display big=True %}
+  <div class="flex flex-wrap items-center justify-start sm:justify-end gap-2 shrink-0">
+    <a class="btn ghost" href="{% url 'analysis_export_csv' analysis.pk %}">Eksport CSV</a>
+    <form method="post" action="{% url 'analysis_approve_all' analysis.pk %}">
+      {% csrf_token %}
+      <button class="btn primary" type="submit">Zatwierdź całość</button>
+    </form>
+    {% include "processes/_status_badge.html" with code=analysis.status label=analysis.get_status_display big=True %}
+  </div>
 </section>
+
+{% if needs_review %}
+  <section class="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5 mb-6">
+    <div class="flex items-center gap-2 mb-3">
+      <svg class="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+      <h2 class="text-amber-800">Wymaga sprawdzenia — {{ needs_review|length }} fragment(y)</h2>
+    </div>
+    <ul class="space-y-1.5">
+      {% for segment in needs_review %}
+        <li class="flex items-center justify-between gap-3 text-sm">
+          <button type="button" class="font-mono text-amber-800 hover:underline cursor-pointer" onclick="seekTo({{ segment.start_seconds|js_number }})">
+            {{ segment.start_seconds|seconds_time }}–{{ segment.end_seconds|seconds_time }}
+          </button>
+          <span class="text-amber-700">{{ segment.activity_name }}</span>
+          <span class="conf {{ segment.confidence|confidence_level }}">{{ segment.confidence|confidence_percent }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
 
 <!-- KPI + koszt -->
 <section class="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-6">
@@ -91,6 +118,7 @@
           <div class="flex justify-between py-2"><dt class="text-slate-500">Koszt (PLN, kurs {{ cost.rate }})</dt><dd class="font-mono text-slate-800 tnum">{{ cost.pln }} zł</dd></div>
         {% endif %}
         <div class="flex justify-between py-2"><dt class="text-slate-500">Segmentów</dt><dd class="font-mono text-slate-800 tnum">{{ analysis.segments.count }}</dd></div>
+        <div class="flex justify-between py-2"><dt class="text-slate-500">Zatwierdzone</dt><dd class="font-mono text-slate-800 tnum">{{ approved_count }}/{{ analysis.segments.count }}</dd></div>
       </dl>
       {% if cost.is_estimated %}
         <p class="help mt-3">Koszt szacowany na podstawie długości wideo i cennika z ustawień — nie pochodzi z realnego rozliczenia API.</p>
@@ -121,7 +149,7 @@
         </div>
         <div class="gantt-track">
           {% for bar in row.bars %}
-            <button type="button" class="gantt-bar" style="left: {{ bar.left }}; width: {{ bar.width }};"
+            <button type="button" class="gantt-bar" data-start="{{ bar.start_seconds|js_number }}" data-end="{{ bar.end_seconds|js_number }}" style="left: {{ bar.left }}; width: {{ bar.width }};"
               onclick="seekTo({{ bar.start_seconds|js_number }})"
               title="{{ row.name }}: {{ bar.start_seconds|seconds_time }}-{{ bar.end_seconds|seconds_time }} / pewność {{ bar.confidence|confidence_percent }}">
               <span>{{ bar.start_seconds|seconds_time }}–{{ bar.end_seconds|seconds_time }}</span>
@@ -151,17 +179,20 @@
       </thead>
       <tbody>
         {% for segment, form in segment_forms %}
-          <tr id="segment-{{ segment.pk }}">
+          <tr id="segment-{{ segment.pk }}" class="segment-row" data-start="{{ segment.start_seconds|js_number }}" data-end="{{ segment.end_seconds|js_number }}">
             <td class="text-right font-mono text-slate-600">{{ segment.start_seconds|seconds_time }}</td>
             <td class="text-right font-mono text-slate-600">{{ segment.end_seconds|seconds_time }}</td>
             <td class="text-right font-mono text-slate-600">{{ segment.duration_seconds|seconds_label }}</td>
-            <td><span class="font-medium text-slate-800">{{ segment.activity_name }}</span></td>
+            {% include "processes/_segment_activity_cell.html" with analysis=analysis segment=segment operation=operation saved=False %}
             <td><span class="conf {{ segment.confidence|confidence_level }}">{{ segment.confidence|confidence_percent }}</span></td>
             <td class="text-slate-500 max-w-xs">{{ segment.reason|default:"—" }}</td>
             <td class="text-right"><button class="btn ghost small" type="button" onclick="seekTo({{ segment.start_seconds|js_number }})">Skocz</button></td>
           </tr>
           <tr>
             <td colspan="7" class="!py-0">
+              <div class="py-3">
+                {% include "processes/_segment_feedback.html" with analysis=analysis segment=segment operation=operation %}
+              </div>
               <details class="group">
                 <summary class="cursor-pointer text-xs font-medium text-primary hover:underline select-none py-2">Popraw segment</summary>
                 <form method="post" action="{% url 'segment_update' analysis.pk segment.pk %}" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-slate-50 rounded-lg p-4 mb-2">
@@ -212,5 +243,21 @@
     player.play();
     player.scrollIntoView({ behavior: "smooth", block: "center" });
   }
+
+  (function () {
+    const player = document.getElementById("analysis-video");
+    if (!player) return;
+    const rows = Array.from(document.querySelectorAll(".segment-row"));
+    const bars = Array.from(document.querySelectorAll(".gantt-bar"));
+    function inRange(el, t) {
+      return t >= parseFloat(el.dataset.start) && t < parseFloat(el.dataset.end);
+    }
+    player.addEventListener("timeupdate", function () {
+      const t = player.currentTime;
+      rows.forEach((r) => r.classList.toggle("bg-primary-50", inRange(r, t)));
+      bars.forEach((b) => b.classList.toggle("ring-2", inRange(b, t)));
+      bars.forEach((b) => b.classList.toggle("ring-amber-400", inRange(b, t)));
+    });
+  })();
 </script>
 {% endblock %}

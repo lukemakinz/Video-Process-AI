@@ -1,0 +1,16 @@
+{% comment %}Komórka czynności segmentu z szybkim wyborem (HTMX). Parametry: analysis, segment, operation, saved.{% endcomment %}
+<td id="seg-activity-{{ segment.pk }}" class="px-3 py-2.5 border-b border-slate-100 align-middle">
+  <div class="flex items-center gap-2">
+    <select name="activity"
+            class="select !py-1 !px-2 text-xs max-w-[12rem]"
+            hx-post="{% url 'segment_reassign' analysis.pk segment.pk %}"
+            hx-target="#seg-activity-{{ segment.pk }}"
+            hx-swap="outerHTML"
+            hx-trigger="change">
+      {% for a in operation.activities.all %}
+        <option value="{{ a.pk }}" {% if segment.activity_id == a.pk %}selected{% endif %}>{{ a.name }}</option>
+      {% endfor %}
+    </select>
+    {% if saved %}<span class="text-xs text-emerald-600 font-medium whitespace-nowrap">✓ zapisano</span>{% endif %}
+  </div>
+</td>

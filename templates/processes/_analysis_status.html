@@ -1,0 +1,31 @@
+{% comment %}Fragment statusu analizy. Swap outerHTML; gdy trwa — sam się odpytuje, gdy gotowe/błąd — przestaje.{% endcomment %}
+{% if analysis and analysis.status == 'completed' %}
+  <div id="analysis-status" class="rounded-xl border border-emerald-200 bg-emerald-50 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <svg class="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <p class="font-medium text-emerald-800">Analiza zakończona</p>
+    </div>
+    <a class="btn primary shrink-0" href="{{ analysis.get_absolute_url }}">Otwórz wynik analizy</a>
+  </div>
+{% elif analysis and analysis.status == 'failed' %}
+  <div id="analysis-status" class="rounded-xl border border-red-200 bg-red-50 p-5">
+    <p class="font-medium text-red-800">Analiza nie powiodła się</p>
+    <p class="text-sm text-red-700/80 mt-1">{{ analysis.error_message|default:"Spróbuj ponownie." }}</p>
+    <form method="post" action="{% url 'video_approve_and_analyze' video.pk %}" class="mt-3">
+      {% csrf_token %}
+      <button class="btn ghost small" type="submit">Spróbuj ponownie</button>
+    </form>
+  </div>
+{% else %}
+  <div id="analysis-status"
+       hx-get="{% url 'analysis_status' video.pk %}"
+       hx-trigger="every 3s"
+       hx-swap="outerHTML"
+       class="rounded-xl border border-primary-100 bg-primary-50 p-5 flex items-center gap-3">
+    <svg class="h-5 w-5 text-primary animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+    <div>
+      <p class="font-medium text-primary-800">Analiza w toku…</p>
+      <p class="text-sm text-primary-700/80">Wynik pojawi się tutaj automatycznie. Możesz nie zamykać tej strony.</p>
+    </div>
+  </div>
+{% endif %}

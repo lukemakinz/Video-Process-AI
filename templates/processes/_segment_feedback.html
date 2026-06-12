@@ -1,0 +1,30 @@
+{% comment %}Widżet oceny segmentu (HTMX). Parametry: analysis, segment, operation, hint_saved.{% endcomment %}
+<div id="seg-feedback-{{ segment.pk }}" class="flex flex-col gap-1">
+  {% if hint_saved %}
+    <span class="text-xs text-emerald-700 font-medium">✓ Uwaga zapisana — AI uwzględni ją przy następnej analizie.</span>
+  {% elif segment.is_approved %}
+    <span class="text-xs text-emerald-700 font-medium">✓ Potwierdzono</span>
+  {% else %}
+    <div class="flex items-center gap-2">
+      <button type="button"
+              class="btn ghost small"
+              hx-post="{% url 'segment_approve' analysis.pk segment.pk %}"
+              hx-target="#seg-feedback-{{ segment.pk }}" hx-swap="outerHTML">
+        👍 Dobrze
+      </button>
+      <details>
+        <summary class="btn ghost small cursor-pointer list-none">👎 Popraw</summary>
+        <form class="mt-2 p-3 bg-slate-50 rounded-lg flex flex-col gap-2 w-72"
+              hx-post="{% url 'segment_feedback' analysis.pk segment.pk %}"
+              hx-target="#seg-feedback-{{ segment.pk }}" hx-swap="outerHTML">
+          <textarea name="note" rows="2" class="input text-xs" placeholder="np. pieprz jest ciemniejszy niż sól"></textarea>
+          <select name="confused_with" class="select text-xs">
+            <option value="">— powinno być (opcjonalnie) —</option>
+            {% for a in operation.activities.all %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}
+          </select>
+          <button type="submit" class="btn primary small">Zapisz uwagę dla AI</button>
+        </form>
+      </details>
+    </div>
+  {% endif %}
+</div>

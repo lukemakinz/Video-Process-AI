@@ -32,6 +32,27 @@
   </div>
 </section>
 
+{% if operation.activities.all %}
+  <div class="rounded-xl border border-primary-100 bg-primary-50 p-4 sm:p-5 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div>
+      <p class="font-medium text-primary-800">Operacja gotowa do analizy</p>
+      <p class="text-sm text-primary-700/80">Wgraj nagranie tej operacji — Gemini przypisze fragmenty do zdefiniowanych czynności.</p>
+    </div>
+    <a class="btn primary shrink-0" href="{% url 'operation_video_upload' operation.pk %}">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+      Wgraj nagranie do analizy
+    </a>
+  </div>
+{% else %}
+  <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div>
+      <p class="font-medium text-amber-800">Najpierw zdefiniuj czynności</p>
+      <p class="text-sm text-amber-700/80">Analiza wymaga zamkniętej listy czynności — to jedyne kategorie, które rozpozna model.</p>
+    </div>
+    <a class="btn secondary shrink-0" href="{% url 'activity_create' operation.pk %}">Dodaj czynność</a>
+  </div>
+{% endif %}
+
 <section class="panel">
   <div class="panel-head">
     <div>
@@ -45,6 +66,7 @@
       <table>
         <thead>
           <tr>
+            <th class="w-28">Kolejność</th>
             <th>Nazwa</th>
             <th>Wykonawca</th>
             <th>Opis</th>
@@ -55,6 +77,17 @@
         <tbody>
           {% for activity in operation.activities.all %}
             <tr>
+              <td>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono font-semibold text-slate-700 w-5">{{ activity.order }}</span>
+                  <form method="post" action="{% url 'activity_move' activity.pk 'up' %}">
+                    {% csrf_token %}<button class="grid place-items-center h-6 w-6 rounded border border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer" title="Wyżej" type="submit">↑</button>
+                  </form>
+                  <form method="post" action="{% url 'activity_move' activity.pk 'down' %}">
+                    {% csrf_token %}<button class="grid place-items-center h-6 w-6 rounded border border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer" title="Niżej" type="submit">↓</button>
+                  </form>
+                </div>
+              </td>
               <td><span class="font-medium text-slate-800">{{ activity.name }}</span></td>
               <td><span class="status">{{ activity.get_performed_by_display }}</span></td>
               <td class="text-slate-500 max-w-md">{{ activity.description|truncatechars:140|default:"—" }}</td>

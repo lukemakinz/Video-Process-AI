@@ -83,9 +83,10 @@ class Activity(TimeStampedModel):
         choices=Performer.choices,
         default=Performer.OPERATOR,
     )
+    order = models.PositiveIntegerField("kolejność", default=1)
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["order", "name"]
         verbose_name = "czynność"
         verbose_name_plural = "czynności"
 
@@ -227,3 +228,38 @@ class AnalysisSegment(TimeStampedModel):
     @property
     def duration_seconds(self):
         return max(Decimal("0"), self.end_seconds - self.start_seconds)
+
+
+class ActivityHint(TimeStampedModel):
+    activity = models.ForeignKey(
+        Activity,
+        verbose_name="czynność",
+        related_name="hints",
+        on_delete=models.CASCADE,
+    )
+    text = models.TextField("wskazówka")
+    confused_with = models.ForeignKey(
+        Activity,
+        verbose_name="mylona z",
+        related_name="confused_hints",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    source_segment = models.ForeignKey(
+        AnalysisSegment,
+        verbose_name="segment źródłowy",
+        related_name="hints",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    is_active = models.BooleanField("aktywna", default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "wskazówka czynności"
+        verbose_name_plural = "wskazówki czynności"
+
+    def __str__(self):
+        return f"{self.activity.name}: {self.text[:40]}"
