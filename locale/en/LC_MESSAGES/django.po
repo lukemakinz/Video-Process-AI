@@ -1,0 +1,769 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-12 18:13+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: processes/models.py:39
+msgid "nazwa operacji"
+msgstr "operation name"
+
+#: processes/models.py:57
+msgid "Operator"
+msgstr "Operator"
+
+#: processes/models.py:58
+msgid "Maszyna"
+msgstr "Machine"
+
+#: processes/models.py:59
+msgid "Operator i maszyna"
+msgstr "Operator and machine"
+
+#: processes/models.py:60
+msgid "Nieokreślone"
+msgstr "Unspecified"
+
+#: processes/models.py:64 processes/models.py:248
+msgid "operacja"
+msgstr "operation"
+
+#: processes/models.py:68
+msgid "nazwa czynności"
+msgstr "activity name"
+
+#: processes/models.py:98
+msgid "Wgrano"
+msgstr "Uploaded"
+
+#: processes/models.py:99 templates/processes/_stepper.html:12
+msgid "Anonimizacja"
+msgstr "Anonymization"
+
+#: processes/models.py:100
+msgid "Do zatwierdzenia"
+msgstr "To approve"
+
+#: processes/models.py:101
+msgid "Zatwierdzono"
+msgstr "Approved"
+
+#: processes/models.py:102 processes/models.py:187
+msgid "Analiza"
+msgstr "Analysis"
+
+#: processes/models.py:103 processes/models.py:188
+msgid "Zakończono"
+msgstr "Completed"
+
+#: processes/models.py:104 processes/models.py:189
+msgid "Błąd"
+msgstr "Error"
+
+#: processes/models.py:186
+msgid "W kolejce"
+msgstr "Queued"
+
+#: processes/models.py:241 processes/models.py:278
+msgid "czynność"
+msgstr "activity"
+
+#: processes/models.py:256
+msgid "od"
+msgstr "from"
+
+#: processes/models.py:257
+msgid "do"
+msgstr "to"
+
+#: processes/models.py:258
+msgid "pewność"
+msgstr "confidence"
+
+#: processes/models.py:259
+msgid "uzasadnienie"
+msgstr "reason"
+
+#: processes/models.py:260
+msgid "zatwierdzony"
+msgstr "approved"
+
+#: processes/views.py:47
+msgid "Proces został utworzony."
+msgstr "Process created."
+
+#: processes/views.py:52 templates/processes/process_list.html:17
+#: templates/processes/process_list.html:58
+msgid "Dodaj proces"
+msgstr "Add process"
+
+#: processes/views.py:52
+msgid "Zapisz proces"
+msgstr "Save process"
+
+#: processes/views.py:66
+msgid "Proces został zaktualizowany."
+msgstr "Process updated."
+
+#: processes/views.py:71
+msgid "Edytuj proces"
+msgstr "Edit process"
+
+#: processes/views.py:71 processes/views.py:166
+msgid "Zapisz zmiany"
+msgstr "Save changes"
+
+#: processes/views.py:79
+msgid "Proces został usunięty."
+msgstr "Process deleted."
+
+#: processes/views.py:84
+msgid "Usuń proces"
+msgstr "Delete process"
+
+#: processes/views.py:100
+#, python-format
+msgid "Zaimportowano %(count)d operacji jako duplikaty."
+msgstr "Imported %(count)d operation(s) as duplicates."
+
+#: processes/views.py:103
+msgid "Nie wybrano żadnej operacji."
+msgstr "No operation selected."
+
+#: processes/views.py:126
+msgid "Operacja została dodana."
+msgstr "Operation added."
+
+#: processes/views.py:133
+#, fuzzy, python-format
+msgid "Dodaj operację: %(name)s"
+msgstr "Add operation: %(name)s"
+
+#: processes/views.py:134
+msgid "Zapisz operację"
+msgstr "Save operation"
+
+#: processes/views.py:158
+msgid "Operacja została zaktualizowana."
+msgstr "Operation updated."
+
+#: processes/views.py:165
+msgid "Edytuj operację"
+msgstr "Edit operation"
+
+#: processes/views.py:178
+msgid "Operacja została usunięta."
+msgstr "Operation deleted."
+
+#: processes/views.py:183
+msgid "Usuń operację"
+msgstr "Delete operation"
+
+#: processes/views.py:244
+msgid "Wpisz nazwę czynności przed użyciem AI."
+msgstr "Enter an activity name before using AI."
+
+#: processes/views.py:253 processes/views.py:296
+msgid "Edytuj czynność"
+msgstr "Edit activity"
+
+#: processes/views.py:253 processes/views.py:296
+#: templates/processes/operation_detail.html:27
+#: templates/processes/operation_detail.html:53
+#: templates/processes/operation_detail.html:110
+msgid "Dodaj czynność"
+msgstr "Add activity"
+
+#: processes/views.py:275
+msgid "AI przygotowało propozycję. Zapisz ją dopiero po akceptacji."
+msgstr "AI prepared a suggestion. Save it only after review."
+
+#: processes/views.py:277
+#, python-format
+msgid "Nie udało się wygenerować opisu AI: %(error)s"
+msgstr "Could not generate AI description: %(error)s"
+
+#: processes/views.py:285
+msgid "Czynność została zapisana."
+msgstr "Activity saved."
+
+#: processes/views.py:308
+msgid "Czynność została usunięta."
+msgstr "Activity deleted."
+
+#: processes/views.py:313
+msgid "Usuń czynność"
+msgstr "Delete activity"
+
+#: processes/views.py:367 processes/views.py:402
+#, python-format
+msgid "Nie udało się odczytać czasu trwania przez FFmpeg: %(error)s"
+msgstr "Could not read duration via FFmpeg: %(error)s"
+
+#: processes/views.py:375 processes/views.py:410
+#, fuzzy, python-format
+msgid "Anonimizacja nie powiodła się: %(error)s"
+msgstr "Anonymization failed: %(error)s"
+
+#: processes/views.py:440
+msgid "Nie można ponowić anonimizacji w trakcie analizy."
+msgstr "Cannot re-run anonymization during analysis."
+
+#: processes/views.py:443
+msgid "Brakuje oryginalnego pliku wideo."
+msgstr "Original video file is missing."
+
+#: processes/views.py:448
+msgid "Anonimizacja została ponowiona z oryginalnego pliku."
+msgstr "Anonymization re-run from the original file."
+
+#: processes/views.py:450
+#, fuzzy, python-format
+msgid "Ponowna anonimizacja nie powiodła się: %(error)s"
+msgstr "Re-anonymization failed: %(error)s"
+
+#: processes/views.py:471
+msgid "Brakuje pliku po anonimizacji. Analiza została zablokowana."
+msgstr "Anonymized file is missing. Analysis was blocked."
+
+#: processes/views.py:475
+msgid "Żadna z wybranych operacji nie ma zdefiniowanych czynności."
+msgstr "None of the selected operations has defined activities."
+
+#: processes/views.py:482
+msgid "Analiza została uruchomiona. Wynik pojawi się automatycznie."
+msgstr "Analysis started. The result will appear automatically."
+
+#: processes/views.py:538
+#, python-format
+msgid "Zatwierdzono %(count)d segment(y)."
+msgstr "Approved %(count)d segment(s)."
+
+#: processes/views.py:540
+msgid "Wszystkie segmenty były już zatwierdzone."
+msgstr "All segments were already approved."
+
+#: processes/views.py:671
+msgid "Segment został zaktualizowany."
+msgstr "Segment updated."
+
+#: processes/views.py:673
+msgid "Nie udało się zapisać segmentu. Sprawdź wartości czasu."
+msgstr "Could not save the segment. Check the time values."
+
+#: templates/base.html:167 templates/processes/operation_detail.html:8
+#: templates/processes/operation_import.html:8
+#: templates/processes/process_detail.html:8
+#: templates/processes/process_list.html:5
+#: templates/processes/process_list.html:11
+#: templates/processes/process_video_upload.html:8
+msgid "Procesy"
+msgstr "Processes"
+
+#: templates/base.html:171
+msgid "Admin"
+msgstr "Admin"
+
+#: templates/base.html:235
+msgid "Wykonanie"
+msgstr "Made by"
+
+#: templates/processes/_analysis_status.html:8
+msgid "Analiza zakończona"
+msgstr "Analysis complete"
+
+#: templates/processes/_analysis_status.html:10
+msgid "Otwórz wynik analizy"
+msgstr "Open analysis result"
+
+#: templates/processes/_analysis_status.html:14
+msgid "Analiza nie powiodła się"
+msgstr "Analysis failed"
+
+#: templates/processes/_analysis_status.html:18
+msgid "Spróbuj ponownie"
+msgstr "Try again"
+
+#: templates/processes/_analysis_status.html:30
+msgid "Wynik pojawi się tutaj automatycznie. Możesz nie zamykać tej strony."
+msgstr "The result will appear here automatically. You can keep this page open."
+
+#: templates/processes/_hint_row.html:15
+#: templates/processes/confirm_delete.html:24
+#: templates/processes/operation_detail.html:99
+#: templates/processes/process_list.html:46
+msgid "Usuń"
+msgstr "Delete"
+
+#: templates/processes/_segment_feedback.html:26
+msgid "— powinno być (opcjonalnie) —"
+msgstr "— should be (optional) —"
+
+#: templates/processes/_segment_feedback.html:29
+msgid "Zapisz uwagę dla AI"
+msgstr "Save note for AI"
+
+#: templates/processes/_stepper.html:7 templates/processes/video_upload.html:4
+#: templates/processes/video_upload.html:11
+msgid "Prześlij nagranie"
+msgstr "Upload recording"
+
+#: templates/processes/_stepper.html:17
+#: templates/processes/analysis_detail.html:5
+#: templates/processes/analysis_detail.html:13
+msgid "Wynik analizy"
+msgstr "Analysis result"
+
+#: templates/processes/activity_form.html:7
+#: templates/processes/operation_detail.html:7
+#: templates/processes/operation_import.html:7
+#: templates/processes/process_detail.html:7
+#: templates/processes/process_video_upload.html:7
+msgid "Ścieżka"
+msgstr "Breadcrumb"
+
+#: templates/processes/activity_form.html:22
+msgid "Wpisz krótki opis i pozwól AI przygotować pełne kryteria, albo uzupełnij je ręcznie."
+msgstr "Enter a short description and let AI prepare full criteria, or fill them in manually."
+
+#: templates/processes/activity_form.html:73
+msgid "Asystent AI"
+msgstr "AI assistant"
+
+#: templates/processes/activity_form.html:83
+msgid "Generuj z AI"
+msgstr "Generate with AI"
+
+#: templates/processes/activity_form.html:87
+msgid "Popraw z AI"
+msgstr "Improve with AI"
+
+#: templates/processes/activity_form.html:97
+msgid "Możliwe pomyłki według AI"
+msgstr "Possible confusions (AI)"
+
+#: templates/processes/activity_form.html:104
+msgid "Wskazówki z korekt (trafiają do promptu, gdy aktywne)"
+msgstr "Correction hints (added to the prompt when active)"
+
+#: templates/processes/activity_form.html:114
+msgid "Zapisz czynność"
+msgstr "Save activity"
+
+#: templates/processes/activity_form.html:115
+#: templates/processes/confirm_delete.html:25 templates/processes/form.html:30
+#: templates/processes/operation_import.html:50
+#: templates/processes/process_video_upload.html:60
+msgid "Anuluj"
+msgstr "Cancel"
+
+#: templates/processes/analysis_detail.html:12
+msgid "Krok 3 z 3"
+msgstr "Step 3 of 3"
+
+#: templates/processes/analysis_detail.html:20
+msgid "Eksport CSV"
+msgstr "Export CSV"
+
+#: templates/processes/analysis_detail.html:23
+msgid "Zatwierdź całość"
+msgstr "Approve all"
+
+#: templates/processes/analysis_detail.html:52
+msgid "Czas nagrania"
+msgstr "Recording duration"
+
+#: templates/processes/analysis_detail.html:56
+msgid "Praca operatora"
+msgstr "Operator work"
+
+#: templates/processes/analysis_detail.html:60
+msgid "Praca maszyny"
+msgstr "Machine work"
+
+#: templates/processes/analysis_detail.html:66
+#: templates/processes/analysis_detail.html:74
+msgid "Szacowany koszt"
+msgstr "Estimated cost"
+
+#: templates/processes/analysis_detail.html:67
+msgid "szacunek"
+msgstr "estimate"
+
+#: templates/processes/analysis_detail.html:76
+msgid "Uruchom analizę ponownie"
+msgstr "Run the analysis again"
+
+#: templates/processes/analysis_detail.html:84
+msgid "Chodzenie"
+msgstr "Walking"
+
+#: templates/processes/analysis_detail.html:88
+msgid "Oczekiwanie"
+msgstr "Waiting"
+
+#: templates/processes/analysis_detail.html:92
+msgid "Niepewne"
+msgstr "Uncertain"
+
+#: templates/processes/analysis_detail.html:101
+msgid "Wideo po anonimizacji"
+msgstr "Anonymized video"
+
+#: templates/processes/analysis_detail.html:106
+msgid "Prompt wysłany do Gemini"
+msgstr "Prompt sent to Gemini"
+
+#: templates/processes/analysis_detail.html:115
+msgid "Szczegóły analizy"
+msgstr "Analysis details"
+
+#: templates/processes/analysis_detail.html:117
+msgid "Model"
+msgstr "Model"
+
+#: templates/processes/analysis_detail.html:119
+msgid "Tokeny wejściowe"
+msgstr "Input tokens"
+
+#: templates/processes/analysis_detail.html:120
+msgid "Tokeny wyjściowe"
+msgstr "Output tokens"
+
+#: templates/processes/analysis_detail.html:124
+msgid "Segmentów"
+msgstr "Segments"
+
+#: templates/processes/analysis_detail.html:125
+msgid "Zatwierdzone"
+msgstr "Approved"
+
+#: templates/processes/analysis_detail.html:128
+msgid "Koszt szacowany na podstawie długości wideo i cennika z ustawień — nie pochodzi z realnego rozliczenia API."
+msgstr "Cost estimated from video length and the pricing in settings — not from real API billing."
+
+#: templates/processes/analysis_detail.html:138
+msgid "Oś czasu czynności"
+msgstr "Activity timeline"
+
+#: templates/processes/analysis_detail.html:139
+msgid "Kliknij segment, aby przeskoczyć do tego momentu w nagraniu."
+msgstr "Click a segment to jump to that point in the recording."
+
+#: templates/processes/analysis_detail.html:146
+msgid "Operacje:"
+msgstr "Operations:"
+
+#: templates/processes/analysis_detail.html:183
+msgid "Lista segmentów"
+msgstr "Segment list"
+
+#: templates/processes/analysis_detail.html:188
+msgid "Od"
+msgstr "From"
+
+#: templates/processes/analysis_detail.html:189
+msgid "Do"
+msgstr "To"
+
+#: templates/processes/analysis_detail.html:190
+#: templates/processes/operation_detail.html:127
+msgid "Czas"
+msgstr "Duration"
+
+#: templates/processes/analysis_detail.html:191
+#: templates/processes/operation_import.html:31
+msgid "Operacja"
+msgstr "Operation"
+
+#: templates/processes/analysis_detail.html:192
+msgid "Czynność"
+msgstr "Activity"
+
+#: templates/processes/analysis_detail.html:193
+msgid "Pewność"
+msgstr "Confidence"
+
+#: templates/processes/analysis_detail.html:194
+msgid "Uzasadnienie"
+msgstr "Reason"
+
+#: templates/processes/analysis_detail.html:195
+#: templates/processes/operation_detail.html:75
+#: templates/processes/operation_detail.html:129
+#: templates/processes/process_detail.html:52
+msgid "Akcje"
+msgstr "Actions"
+
+#: templates/processes/analysis_detail.html:220
+msgid "Popraw segment"
+msgstr "Edit segment"
+
+#: templates/processes/analysis_detail.html:231
+msgid "Zapisz korektę"
+msgstr "Save correction"
+
+#: templates/processes/analysis_detail.html:245
+msgid "Czasy czynności"
+msgstr "Activity times"
+
+#: templates/processes/confirm_delete.html:8
+msgid "Potwierdzenie"
+msgstr "Confirmation"
+
+#: templates/processes/confirm_delete.html:18
+msgid "Czy na pewno usunąć:"
+msgstr "Are you sure you want to delete:"
+
+#: templates/processes/confirm_delete.html:19
+msgid "Tej operacji nie można cofnąć."
+msgstr "This action cannot be undone."
+
+#: templates/processes/form.html:8
+msgid "Konfiguracja procesu"
+msgstr "Process configuration"
+
+#: templates/processes/operation_detail.html:24
+#: templates/processes/operation_detail.html:98
+#: templates/processes/process_detail.html:21
+#: templates/processes/process_list.html:45
+msgid "Edytuj"
+msgstr "Edit"
+
+#: templates/processes/operation_detail.html:31
+#: templates/processes/process_detail.html:33
+#: templates/processes/process_detail.html:74
+#: templates/processes/process_video_upload.html:12
+msgid "Analizuj film"
+msgstr "Analyze video"
+
+#: templates/processes/operation_detail.html:39
+msgid "Operacja gotowa do analizy"
+msgstr "Operation ready for analysis"
+
+#: templates/processes/operation_detail.html:40
+msgid "Wgraj nagranie tej operacji — Gemini przypisze fragmenty do zdefiniowanych czynności."
+msgstr "Upload a recording for this operation — Gemini will assign segments to the defined activities."
+
+#: templates/processes/operation_detail.html:44
+msgid "Wgraj nagranie do analizy"
+msgstr "Upload recording for analysis"
+
+#: templates/processes/operation_detail.html:50
+msgid "Najpierw zdefiniuj czynności"
+msgstr "Define activities first"
+
+#: templates/processes/operation_detail.html:51
+msgid "Analiza wymaga zamkniętej listy czynności — to jedyne kategorie, które rozpozna model."
+msgstr "Analysis requires a closed list of activities — those are the only categories the model will recognize."
+
+#: templates/processes/operation_detail.html:60
+msgid "Czynności przypisane do operacji"
+msgstr "Activities assigned to the operation"
+
+#: templates/processes/operation_detail.html:61
+msgid "Gemini wybiera wyłącznie spośród tych czynności — to zamknięta lista."
+msgstr "Gemini chooses only from these activities — this is a closed list."
+
+#: templates/processes/operation_detail.html:71
+#: templates/processes/process_detail.html:50
+msgid "Nazwa"
+msgstr "Name"
+
+#: templates/processes/operation_detail.html:72
+msgid "Wykonawca"
+msgstr "Performed by"
+
+#: templates/processes/operation_detail.html:73
+#: templates/processes/process_detail.html:51
+msgid "Opis"
+msgstr "Description"
+
+#: templates/processes/operation_detail.html:109
+msgid "Dodaj zamkniętą listę czynności. Gemini będzie mogło wybierać tylko spośród nich."
+msgstr "Add a closed list of activities. Gemini will only be able to choose from them."
+
+#: templates/processes/operation_detail.html:117
+msgid "Ostatnie nagrania"
+msgstr "Recent recordings"
+
+#: templates/processes/operation_detail.html:118
+msgid "Wgraj nowe"
+msgstr "Upload new"
+
+#: templates/processes/operation_detail.html:125
+msgid "Plik"
+msgstr "File"
+
+#: templates/processes/operation_detail.html:126
+msgid "Status"
+msgstr "Status"
+
+#: templates/processes/operation_detail.html:128
+msgid "Utworzono"
+msgstr "Created"
+
+#: templates/processes/operation_detail.html:139
+msgid "Podgląd"
+msgstr "Preview"
+
+#: templates/processes/operation_detail.html:146
+msgid "Nie wgrano jeszcze nagrań dla tej operacji."
+msgstr "No recordings uploaded for this operation yet."
+
+#: templates/processes/operation_import.html:4
+#: templates/processes/operation_import.html:12
+#: templates/processes/operation_import.html:19
+#: templates/processes/process_detail.html:28
+msgid "Importuj operację"
+msgstr "Import operation"
+
+#: templates/processes/operation_import.html:20
+msgid "Wybierz operacje z innych procesów. Zostaną skopiowane jako niezależne duplikaty (wraz z czynnościami) — edycja kopii nie zmienia oryginału."
+msgstr "Pick operations from other processes. They will be copied as independent duplicates (with activities) — editing the copy does not change the original."
+
+#: templates/processes/operation_import.html:32
+msgid "Proces źródłowy"
+msgstr "Source process"
+
+#: templates/processes/operation_import.html:33
+msgid "Czynności"
+msgstr "Activities"
+
+#: templates/processes/operation_import.html:49
+msgid "Importuj zaznaczone (jako duplikaty)"
+msgstr "Import selected (as duplicates)"
+
+#: templates/processes/operation_import.html:55
+msgid "Brak operacji w innych procesach do zaimportowania."
+msgstr "No operations in other processes to import."
+
+#: templates/processes/operation_import.html:56
+#: templates/processes/process_detail.html:24
+#: templates/processes/process_detail.html:85
+#: templates/processes/process_video_upload.html:39
+msgid "Dodaj operację"
+msgstr "Add operation"
+
+#: templates/processes/process_detail.html:41
+msgid "Operacje procesu"
+msgstr "Process operations"
+
+#: templates/processes/process_detail.html:49
+msgid "Kolejność"
+msgstr "Order"
+
+#: templates/processes/process_detail.html:73
+#: templates/processes/process_list.html:44
+msgid "Otwórz"
+msgstr "Open"
+
+#: templates/processes/process_detail.html:84
+msgid "Ten proces nie ma jeszcze operacji."
+msgstr "This process has no operations yet."
+
+#: templates/processes/process_list.html:10
+msgid "Demo GenAI Video"
+msgstr "GenAI Video demo"
+
+#: templates/processes/process_list.html:12
+msgid "Definiuj procesy, operacje i zamkniętą listę czynności, a następnie analizuj nagrania."
+msgstr "Define processes, operations and a closed list of activities, then analyze recordings."
+
+#: templates/processes/process_list.html:56
+msgid "Brak procesów"
+msgstr "No processes"
+
+#: templates/processes/process_list.html:57
+msgid "Dodaj pierwszy proces albo załaduj dane przykładowe poleceniem"
+msgstr "Add your first process or load sample data with the command"
+
+#: templates/processes/process_video_upload.html:19
+msgid "Analizuj film procesu"
+msgstr "Analyze process video"
+
+#: templates/processes/process_video_upload.html:20
+msgid "Zaznacz operacje, które mogą wystąpić na nagraniu (równolegle, np. różni pracownicy). Model przypisze fragmenty do operacji i ich czynności."
+msgstr "Select the operations that may appear in the recording (in parallel, e.g. different workers). The model will assign segments to operations and their activities."
+
+#: templates/processes/process_video_upload.html:28
+msgid "Operacje do analizy"
+msgstr "Operations to analyze"
+
+#: templates/processes/process_video_upload.html:52
+#: templates/processes/video_upload.html:38
+msgid "Obsługiwane formaty:"
+msgstr "Supported formats:"
+
+#: templates/processes/process_video_upload.html:58
+msgid "Wgraj i anonimizuj"
+msgstr "Upload and anonymize"
+
+#: templates/processes/video_review.html:5
+msgid "Podgląd anonimizacji"
+msgstr "Anonymization preview"
+
+#: templates/processes/video_review.html:12
+msgid "Krok 2 z 3"
+msgstr "Step 2 of 3"
+
+#: templates/processes/video_review.html:13
+msgid "Podgląd po anonimizacji"
+msgstr "Anonymization preview"
+
+#: templates/processes/video_review.html:34
+msgid "Do Gemini zostanie wysłany"
+msgstr "Only this anonymized file will be sent to Gemini"
+
+#: templates/processes/video_review.html:34
+msgid "wyłącznie ten zanonimizowany plik"
+msgstr "only this anonymized file"
+
+#: templates/processes/video_review.html:39
+msgid "Ponów anonimizację z oryginału"
+msgstr "Re-run anonymization from original"
+
+#: templates/processes/video_review.html:46
+#: templates/processes/video_review.html:55
+#: templates/processes/video_review.html:72
+msgid "Wróć do procesu"
+msgstr "Back to process"
+
+#: templates/processes/video_review.html:53
+msgid "Zatwierdź i rozpocznij analizę Gemini"
+msgstr "Approve and start Gemini analysis"
+
+#: templates/processes/video_review.html:64
+msgid "Brak pliku po anonimizacji"
+msgstr "No anonymized file"
+
+#: templates/processes/video_review.html:69
+msgid "Ponów anonimizację"
+msgstr "Re-run anonymization"
+
+#: templates/processes/video_upload.html:10
+msgid "Krok 1 z 3"
+msgstr "Step 1 of 3"
+
+#: templates/processes/video_upload.html:12
+msgid "Po uploadzie aplikacja utworzy wersję z anonimizacją twarzy. Analiza Gemini ruszy dopiero po podglądzie i zatwierdzeniu."
+msgstr "After upload the app creates a face-anonymized version. Gemini analysis starts only after preview and approval."
+
+#~ msgid "demo analizy procesu z GenAI"
+#~ msgstr "process video analysis demo with GenAI"
+
+#~ msgid "proces → operacja → czynności → film → analiza → korekta"
+#~ msgstr "process → operation → activities → video → analysis → correction"

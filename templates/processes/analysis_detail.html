@@ -1,23 +1,25 @@
 {% extends "base.html" %}
+{% load i18n %}
 {% load process_tags %}
 
-{% block title %}Wynik analizy{% endblock %}
+{% block title %}{% trans "Wynik analizy" %}{% endblock %}
 
 {% block content %}
 {% include "processes/_stepper.html" with current=3 %}
 
 <section class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
   <div>
-    <p class="eyebrow">Krok 3 z 3</p>
-    <h1>Wynik analizy</h1>
-    <p class="lead">{{ analysis.video.operation.process.name }} / {{ analysis.video.operation.name }}</p>
+    <p class="eyebrow">{% trans "Krok 3 z 3" %}</p>
+    <h1>{% trans "Wynik analizy" %}</h1>
+    <p class="lead">
+      {{ analysis.video.analysis_process.name }} ·
+      {% for op in operations %}{{ op.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </p>
   </div>
   <div class="flex flex-wrap items-center justify-start sm:justify-end gap-2 shrink-0">
-    <a class="btn ghost" href="{% url 'analysis_export_csv' analysis.pk %}">Eksport CSV</a>
-    <form method="post" action="{% url 'analysis_approve_all' analysis.pk %}">
-      {% csrf_token %}
-      <button class="btn primary" type="submit">Zatwierdź całość</button>
-    </form>
+    {% comment %} Eksport CSV chwilowo wyłączony
+    <a class="btn ghost" href="{% url 'analysis_export_csv' analysis.pk %}">{% trans "Eksport CSV" %}</a>
+    {% endcomment %}
     {% include "processes/_status_badge.html" with code=analysis.status label=analysis.get_status_display big=True %}
   </div>
 </section>
@@ -45,31 +47,31 @@
 <!-- KPI + koszt -->
 <section class="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-6">
   <div class="card p-4">
-    <p class="text-xs uppercase tracking-wide text-slate-400">Czas nagrania</p>
+    <p class="text-xs uppercase tracking-wide text-slate-400">{% trans "Czas nagrania" %}</p>
     <p class="font-mono text-2xl font-semibold text-slate-900 mt-1 tnum">{{ summary.video_duration|seconds_label }}</p>
   </div>
   <div class="card p-4">
-    <p class="text-xs uppercase tracking-wide text-slate-400">Praca operatora</p>
+    <p class="text-xs uppercase tracking-wide text-slate-400">{% trans "Praca operatora" %}</p>
     <p class="font-mono text-2xl font-semibold text-slate-900 mt-1 tnum">{{ summary.operator|seconds_label }}</p>
   </div>
   <div class="card p-4">
-    <p class="text-xs uppercase tracking-wide text-slate-400">Praca maszyny</p>
+    <p class="text-xs uppercase tracking-wide text-slate-400">{% trans "Praca maszyny" %}</p>
     <p class="font-mono text-2xl font-semibold text-slate-900 mt-1 tnum">{{ summary.machine|seconds_label }}</p>
   </div>
   {% if cost %}
     <div class="card p-4 border-accent-100 bg-accent-50">
       <div class="flex items-center justify-between gap-2">
-        <p class="text-xs uppercase tracking-wide text-accent-700">Szacowany koszt</p>
-        {% if cost.is_estimated %}<span class="text-[10px] font-semibold uppercase text-accent-700/70" title="Brak realnych danych o tokenach – wartość szacowana z długości wideo">szacunek</span>{% endif %}
+        <p class="text-xs uppercase tracking-wide text-accent-700">{% trans "Szacowany koszt" %}</p>
+        {% if cost.is_estimated %}<span class="text-[10px] font-semibold uppercase text-accent-700/70" title="Brak realnych danych o tokenach – wartość szacowana z długości wideo">{% trans "szacunek" %}</span>{% endif %}
       </div>
       <p class="font-mono text-2xl font-semibold text-accent-700 mt-1 tnum">${{ cost.usd }}</p>
       <p class="font-mono text-xs text-accent-700/80 tnum">≈ {{ cost.pln }} zł</p>
     </div>
   {% else %}
     <div class="card p-4">
-      <p class="text-xs uppercase tracking-wide text-slate-400">Szacowany koszt</p>
+      <p class="text-xs uppercase tracking-wide text-slate-400">{% trans "Szacowany koszt" %}</p>
       <p class="font-mono text-2xl font-semibold text-slate-300 mt-1">—</p>
-      <p class="text-xs text-slate-400">Uruchom analizę ponownie</p>
+      <p class="text-xs text-slate-400">{% trans "Uruchom analizę ponownie" %}</p>
     </div>
   {% endif %}
 </section>
@@ -77,15 +79,15 @@
 <!-- drugorzędne metryki -->
 <section class="grid gap-3 grid-cols-3 mb-6">
   <div class="card p-3 text-center">
-    <p class="text-xs text-slate-400">Chodzenie</p>
+    <p class="text-xs text-slate-400">{% trans "Chodzenie" %}</p>
     <p class="font-mono text-lg font-semibold text-slate-700 tnum">{{ summary.walking|seconds_label }}</p>
   </div>
   <div class="card p-3 text-center">
-    <p class="text-xs text-slate-400">Oczekiwanie</p>
+    <p class="text-xs text-slate-400">{% trans "Oczekiwanie" %}</p>
     <p class="font-mono text-lg font-semibold text-slate-700 tnum">{{ summary.waiting|seconds_label }}</p>
   </div>
   <div class="card p-3 text-center">
-    <p class="text-xs text-slate-400">Niepewne</p>
+    <p class="text-xs text-slate-400">{% trans "Niepewne" %}</p>
     <p class="font-mono text-lg font-semibold text-slate-700 tnum">{{ summary.uncertain|seconds_label }}</p>
   </div>
 </section>
@@ -94,12 +96,12 @@
   <!-- wideo + prompt -->
   <div class="lg:col-span-2 space-y-6">
     <section class="panel mb-0">
-      <div class="panel-head"><h2>Wideo po anonimizacji</h2></div>
+      <div class="panel-head"><h2>{% trans "Wideo po anonimizacji" %}</h2></div>
       {% if analysis.video.anonymized_file %}
         <video id="analysis-video" class="w-full rounded-lg border border-slate-200 bg-black aspect-video" controls src="{{ analysis.video.anonymized_file.url }}"></video>
       {% endif %}
       <details class="mt-4 group">
-        <summary class="cursor-pointer text-sm font-medium text-slate-600 hover:text-primary select-none">Prompt wysłany do Gemini</summary>
+        <summary class="cursor-pointer text-sm font-medium text-slate-600 hover:text-primary select-none">{% trans "Prompt wysłany do Gemini" %}</summary>
         <pre class="mt-2 rounded-lg bg-slate-900 text-slate-100 text-xs font-mono p-4 overflow-x-auto whitespace-pre-wrap">{{ analysis.prompt }}</pre>
       </details>
     </section>
@@ -108,20 +110,20 @@
   <!-- szczegóły kosztu / modelu -->
   <aside class="space-y-6">
     <section class="panel mb-0">
-      <div class="panel-head"><h2>Szczegóły analizy</h2></div>
+      <div class="panel-head"><h2>{% trans "Szczegóły analizy" %}</h2></div>
       <dl class="divide-y divide-slate-100 text-sm">
-        <div class="flex justify-between py-2"><dt class="text-slate-500">Model</dt><dd class="font-mono text-slate-800">{{ analysis.model_name|default:"—" }}</dd></div>
+        <div class="flex justify-between py-2"><dt class="text-slate-500">{% trans "Model" %}</dt><dd class="font-mono text-slate-800">{{ analysis.model_name|default:"—" }}</dd></div>
         {% if cost %}
-          <div class="flex justify-between py-2"><dt class="text-slate-500">Tokeny wejściowe</dt><dd class="font-mono text-slate-800 tnum">{{ cost.input_tokens }}</dd></div>
-          <div class="flex justify-between py-2"><dt class="text-slate-500">Tokeny wyjściowe</dt><dd class="font-mono text-slate-800 tnum">{{ cost.output_tokens }}</dd></div>
+          <div class="flex justify-between py-2"><dt class="text-slate-500">{% trans "Tokeny wejściowe" %}</dt><dd class="font-mono text-slate-800 tnum">{{ cost.input_tokens }}</dd></div>
+          <div class="flex justify-between py-2"><dt class="text-slate-500">{% trans "Tokeny wyjściowe" %}</dt><dd class="font-mono text-slate-800 tnum">{{ cost.output_tokens }}</dd></div>
           <div class="flex justify-between py-2"><dt class="text-slate-500">Koszt (USD)</dt><dd class="font-mono font-semibold text-accent-700 tnum">${{ cost.usd }}</dd></div>
           <div class="flex justify-between py-2"><dt class="text-slate-500">Koszt (PLN, kurs {{ cost.rate }})</dt><dd class="font-mono text-slate-800 tnum">{{ cost.pln }} zł</dd></div>
         {% endif %}
-        <div class="flex justify-between py-2"><dt class="text-slate-500">Segmentów</dt><dd class="font-mono text-slate-800 tnum">{{ analysis.segments.count }}</dd></div>
-        <div class="flex justify-between py-2"><dt class="text-slate-500">Zatwierdzone</dt><dd class="font-mono text-slate-800 tnum">{{ approved_count }}/{{ analysis.segments.count }}</dd></div>
+        <div class="flex justify-between py-2"><dt class="text-slate-500">{% trans "Segmentów" %}</dt><dd class="font-mono text-slate-800 tnum">{{ analysis.segments.count }}</dd></div>
+        <div class="flex justify-between py-2"><dt class="text-slate-500">{% trans "Zatwierdzone" %}</dt><dd class="font-mono text-slate-800 tnum">{{ approved_count }}/{{ analysis.segments.count }}</dd></div>
       </dl>
       {% if cost.is_estimated %}
-        <p class="help mt-3">Koszt szacowany na podstawie długości wideo i cennika z ustawień — nie pochodzi z realnego rozliczenia API.</p>
+        <p class="help mt-3">{% trans "Koszt szacowany na podstawie długości wideo i cennika z ustawień — nie pochodzi z realnego rozliczenia API." %}</p>
       {% endif %}
     </section>
   </aside>
@@ -131,11 +133,24 @@
 <section class="panel mt-6">
   <div class="panel-head">
     <div>
-      <h2>Oś czasu czynności</h2>
-      <p class="muted text-sm mt-1">Kliknij segment, aby przeskoczyć do tego momentu w nagraniu.</p>
+      <h2>{% trans "Oś czasu czynności" %}</h2>
+      <p class="muted text-sm mt-1">{% trans "Kliknij segment, aby przeskoczyć do tego momentu w nagraniu." %}</p>
     </div>
     <span class="pill">{{ analysis.segments.count }} wykrytych</span>
   </div>
+
+  {% if summary.operations_legend %}
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-4 text-xs">
+      <span class="text-slate-400 uppercase tracking-wide">{% trans "Operacje:" %}</span>
+      {% for op in summary.operations_legend %}
+        <span class="inline-flex items-center gap-1.5">
+          <span class="h-3 w-3 rounded-sm" style="background-color: {{ op.color }}"></span>
+          <span class="text-slate-700 font-medium">{{ op.name }}</span>
+        </span>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   <div class="gantt">
     <div class="gantt-scale">
       <span>00:00</span>
@@ -145,13 +160,13 @@
       <div class="gantt-row">
         <div class="gantt-label">
           <strong>{{ row.name }}</strong>
-          <span>{{ row.duration|seconds_label }}</span>
+          <span>{% if summary.is_multi_operation %}{{ row.operation_name }} · {% endif %}{{ row.duration|seconds_label }}</span>
         </div>
         <div class="gantt-track">
           {% for bar in row.bars %}
-            <button type="button" class="gantt-bar" data-start="{{ bar.start_seconds|js_number }}" data-end="{{ bar.end_seconds|js_number }}" style="left: {{ bar.left }}; width: {{ bar.width }};"
+            <button type="button" class="gantt-bar" data-start="{{ bar.start_seconds|js_number }}" data-end="{{ bar.end_seconds|js_number }}" style="left: {{ bar.left }}; width: {{ bar.width }}; background-color: {{ bar.color }};"
               onclick="seekTo({{ bar.start_seconds|js_number }})"
-              title="{{ row.name }}: {{ bar.start_seconds|seconds_time }}-{{ bar.end_seconds|seconds_time }} / pewność {{ bar.confidence|confidence_percent }}">
+              title="{{ row.operation_name }} / {{ row.name }}: {{ bar.start_seconds|seconds_time }}-{{ bar.end_seconds|seconds_time }} / pewność {{ bar.confidence|confidence_percent }}">
               <span>{{ bar.start_seconds|seconds_time }}–{{ bar.end_seconds|seconds_time }}</span>
             </button>
           {% endfor %}
@@ -163,18 +178,19 @@
 
 <!-- tabela segmentów -->
 <section class="panel">
-  <div class="panel-head"><h2>Lista segmentów</h2></div>
+  <div class="panel-head"><h2>{% trans "Lista segmentów" %}</h2></div>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th class="text-right">Od</th>
-          <th class="text-right">Do</th>
-          <th class="text-right">Czas</th>
-          <th>Czynność</th>
-          <th>Pewność</th>
-          <th>Uzasadnienie</th>
-          <th class="text-right">Akcje</th>
+          <th class="text-right">{% trans "Od" %}</th>
+          <th class="text-right">{% trans "Do" %}</th>
+          <th class="text-right">{% trans "Czas" %}</th>
+          <th>{% trans "Operacja" %}</th>
+          <th>{% trans "Czynność" %}</th>
+          <th>{% trans "Pewność" %}</th>
+          <th>{% trans "Uzasadnienie" %}</th>
+          <th class="text-right">{% trans "Akcje" %}</th>
         </tr>
       </thead>
       <tbody>
@@ -183,18 +199,23 @@
             <td class="text-right font-mono text-slate-600">{{ segment.start_seconds|seconds_time }}</td>
             <td class="text-right font-mono text-slate-600">{{ segment.end_seconds|seconds_time }}</td>
             <td class="text-right font-mono text-slate-600">{{ segment.duration_seconds|seconds_label }}</td>
-            {% include "processes/_segment_activity_cell.html" with analysis=analysis segment=segment operation=operation saved=False %}
+            <td class="text-slate-600">{{ segment.operation_name|default:"—" }}</td>
+            {% include "processes/_segment_activity_cell.html" with analysis=analysis segment=segment operation=segment.operation|default:operation saved=False %}
             <td><span class="conf {{ segment.confidence|confidence_level }}">{{ segment.confidence|confidence_percent }}</span></td>
             <td class="text-slate-500 max-w-xs">{{ segment.reason|default:"—" }}</td>
-            <td class="text-right"><button class="btn ghost small" type="button" onclick="seekTo({{ segment.start_seconds|js_number }})">Skocz</button></td>
+            <td class="text-right">
+              <button class="btn ghost small" type="button" title="Skocz do tego momentu w nagraniu" aria-label="Skocz do tego momentu w nagraniu" onclick="seekTo({{ segment.start_seconds|js_number }})">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
+              </button>
+            </td>
           </tr>
           <tr>
-            <td colspan="7" class="!py-0">
+            <td colspan="8" class="!py-0">
               <div class="py-3">
                 {% include "processes/_segment_feedback.html" with analysis=analysis segment=segment operation=operation %}
               </div>
               <details class="group">
-                <summary class="cursor-pointer text-xs font-medium text-primary hover:underline select-none py-2">Popraw segment</summary>
+                <summary class="cursor-pointer text-xs font-medium text-primary hover:underline select-none py-2">{% trans "Popraw segment" %}</summary>
                 <form method="post" action="{% url 'segment_update' analysis.pk segment.pk %}" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-slate-50 rounded-lg p-4 mb-2">
                   {% csrf_token %}
                   {% for field in form %}
@@ -205,7 +226,7 @@
                     </div>
                   {% endfor %}
                   <div class="sm:col-span-2 lg:col-span-3">
-                    <button class="btn primary small" type="submit">Zapisz korektę</button>
+                    <button class="btn primary small" type="submit">{% trans "Zapisz korektę" %}</button>
                   </div>
                 </form>
               </details>
@@ -219,7 +240,7 @@
 
 <!-- udział czasowy czynności -->
 <section class="panel">
-  <div class="panel-head"><h2>Czasy czynności</h2></div>
+  <div class="panel-head"><h2>{% trans "Czasy czynności" %}</h2></div>
   <div class="activity-bars">
     {% for row in summary.activity_rows %}
       <div class="bar-row">

@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% load i18n %}
 
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
 <section class="mb-6">
-  <p class="eyebrow">Konfiguracja procesu</p>
+  <p class="eyebrow">{% trans "Konfiguracja procesu" %}</p>
   <h1>{{ title }}</h1>
 </section>
 
@@ -26,7 +27,7 @@
   {% endfor %}
   <div class="flex items-center gap-2 pt-2">
     <button class="btn primary" type="submit">{{ submit_label|default:"Zapisz" }}</button>
-    <a class="btn ghost" href="{% if cancel_url %}{{ cancel_url }}{% else %}{% url 'process_list' %}{% endif %}">Anuluj</a>
+    <a class="btn ghost" href="{% if cancel_url %}{{ cancel_url }}{% else %}{% url 'process_list' %}{% endif %}">{% trans "Anuluj" %}</a>
   </div>
 </form>
 {% endblock %}

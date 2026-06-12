@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Importuj operację" %} — {{ process.name }}{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="crumbs" aria-label="{% trans 'Ścieżka' %}">
+  <a href="{% url 'process_list' %}">{% trans "Procesy" %}</a>
+  <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+  <a href="{{ process.get_absolute_url }}">{{ process.name }}</a>
+  <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+  <span class="current">{% trans "Importuj operację" %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="mb-6">
+  <p class="eyebrow">{{ process.name }}</p>
+  <h1>{% trans "Importuj operację" %}</h1>
+  <p class="lead">{% trans "Wybierz operacje z innych procesów. Zostaną skopiowane jako niezależne duplikaty (wraz z czynnościami) — edycja kopii nie zmienia oryginału." %}</p>
+</section>
+
+{% if operations %}
+  <form method="post" class="panel">
+    {% csrf_token %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="w-10"></th>
+            <th>{% trans "Operacja" %}</th>
+            <th>{% trans "Proces źródłowy" %}</th>
+            <th class="text-right">{% trans "Czynności" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for op in operations %}
+            <tr>
+              <td><input type="checkbox" name="operations" value="{{ op.pk }}" class="check-input"></td>
+              <td class="font-medium text-slate-800">{{ op.name }}</td>
+              <td class="text-slate-500">{{ op.process.name }}</td>
+              <td class="text-right font-mono text-slate-600">{{ op.activities.count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="flex items-center gap-2 pt-4">
+      <button class="btn primary" type="submit">{% trans "Importuj zaznaczone (jako duplikaty)" %}</button>
+      <a class="btn ghost" href="{{ process.get_absolute_url }}">{% trans "Anuluj" %}</a>
+    </div>
+  </form>
+{% else %}
+  <div class="empty-state">
+    <p>{% trans "Brak operacji w innych procesach do zaimportowania." %}</p>
+    <a class="btn primary" href="{% url 'operation_create' process.pk %}">{% trans "Dodaj operację" %}</a>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,3 +1,4 @@
+{% load i18n %}
 {% comment %}Widżet oceny segmentu (HTMX). Parametry: analysis, segment, operation, hint_saved.{% endcomment %}
 <div id="seg-feedback-{{ segment.pk }}" class="flex flex-col gap-1">
   {% if hint_saved %}
@@ -21,10 +22,10 @@
               hx-target="#seg-feedback-{{ segment.pk }}" hx-swap="outerHTML">
           <textarea name="note" rows="2" class="input text-xs" placeholder="np. pieprz jest ciemniejszy niż sól"></textarea>
           <select name="confused_with" class="select text-xs">
-            <option value="">— powinno być (opcjonalnie) —</option>
+            <option value="">{% trans "— powinno być (opcjonalnie) —" %}</option>
             {% for a in operation.activities.all %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}
           </select>
-          <button type="submit" class="btn primary small">Zapisz uwagę dla AI</button>
+          <button type="submit" class="btn primary small">{% trans "Zapisz uwagę dla AI" %}</button>
         </form>
       </details>
     </div>

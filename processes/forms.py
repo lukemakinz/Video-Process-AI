@@ -92,13 +92,44 @@ class VideoUploadForm(StyledFormMixin, forms.ModelForm):
             self.fields["operation"].widget = forms.HiddenInput()
 
     def clean_file(self):
-        uploaded_file = self.cleaned_data["file"]
-        extension = Path(uploaded_file.name).suffix.lower()
-        if extension not in {".mp4", ".mov"}:
-            raise forms.ValidationError("Demo obsługuje tylko pliki MP4 i MOV.")
-        if uploaded_file.size > 1024 * 1024 * 1024:
-            raise forms.ValidationError("Maksymalny rozmiar pliku w demo to 1 GB.")
-        return uploaded_file
+        return _validate_video_file(self.cleaned_data["file"])
+
+
+def _validate_video_file(uploaded_file):
+    extension = Path(uploaded_file.name).suffix.lower()
+    if extension not in {".mp4", ".mov"}:
+        raise forms.ValidationError("Demo obsługuje tylko pliki MP4 i MOV.")
+    if uploaded_file.size > 1024 * 1024 * 1024:
+        raise forms.ValidationError("Maksymalny rozmiar pliku w demo to 1 GB.")
+    return uploaded_file
+
+
+class ProcessVideoUploadForm(StyledFormMixin, forms.ModelForm):
+    operations = forms.ModelMultipleChoiceField(
+        label="Operacje do analizy",
+        queryset=Operation.objects.none(),
+        widget=forms.CheckboxSelectMultiple(attrs={"class": ""}),
+        help_text="Zaznacz operacje, które mogą wystąpić na nagraniu (możesz wybrać jedną).",
+    )
+
+    class Meta:
+        model = Video
+        fields = ["file"]
+
+    def __init__(self, *args, process=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.process = process
+        if process is not None:
+            self.fields["operations"].queryset = process.operations.order_by("order", "name")
+
+    def clean_operations(self):
+        operations = self.cleaned_data["operations"]
+        if not operations:
+            raise forms.ValidationError("Zaznacz przynajmniej jedną operację.")
+        return operations
+
+    def clean_file(self):
+        return _validate_video_file(self.cleaned_data["file"])
 
 
 class SegmentCorrectionForm(StyledFormMixin, forms.ModelForm):

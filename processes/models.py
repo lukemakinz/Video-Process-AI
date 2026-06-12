@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.db import models
 from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
 
 
 class TimeStampedModel(models.Model):
@@ -35,7 +36,7 @@ class Operation(TimeStampedModel):
         related_name="operations",
         on_delete=models.CASCADE,
     )
-    name = models.CharField("nazwa operacji", max_length=200)
+    name = models.CharField(_("nazwa operacji"), max_length=200)
     description = models.TextField("opis operacji", blank=True)
     order = models.PositiveIntegerField("kolejność", default=1)
 
@@ -53,18 +54,18 @@ class Operation(TimeStampedModel):
 
 class Activity(TimeStampedModel):
     class Performer(models.TextChoices):
-        OPERATOR = "operator", "Operator"
-        MACHINE = "machine", "Maszyna"
-        BOTH = "both", "Operator i maszyna"
-        UNKNOWN = "unknown", "Nieokreślone"
+        OPERATOR = "operator", _("Operator")
+        MACHINE = "machine", _("Maszyna")
+        BOTH = "both", _("Operator i maszyna")
+        UNKNOWN = "unknown", _("Nieokreślone")
 
     operation = models.ForeignKey(
         Operation,
-        verbose_name="operacja",
+        verbose_name=_("operacja"),
         related_name="activities",
         on_delete=models.CASCADE,
     )
-    name = models.CharField("nazwa czynności", max_length=200)
+    name = models.CharField(_("nazwa czynności"), max_length=200)
     description = models.TextField("opis tego, co powinno być widoczne", blank=True)
     recognition_rules = models.TextField("warunki rozpoznania", blank=True)
     exclusion_rules = models.TextField("warunki wykluczenia", blank=True)
@@ -94,19 +95,35 @@ class Activity(TimeStampedModel):
 
 class Video(models.Model):
     class Status(models.TextChoices):
-        UPLOADED = "uploaded", "Wgrano"
-        ANONYMIZING = "anonymizing", "Anonimizacja"
-        AWAITING_APPROVAL = "awaiting_approval", "Do zatwierdzenia"
-        APPROVED = "approved", "Zatwierdzono"
-        ANALYZING = "analyzing", "Analiza"
-        COMPLETED = "completed", "Zakończono"
-        FAILED = "failed", "Błąd"
+        UPLOADED = "uploaded", _("Wgrano")
+        ANONYMIZING = "anonymizing", _("Anonimizacja")
+        AWAITING_APPROVAL = "awaiting_approval", _("Do zatwierdzenia")
+        APPROVED = "approved", _("Zatwierdzono")
+        ANALYZING = "analyzing", _("Analiza")
+        COMPLETED = "completed", _("Zakończono")
+        FAILED = "failed", _("Błąd")
 
+    process = models.ForeignKey(
+        "Process",
+        verbose_name="proces",
+        related_name="videos",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+    )
     operation = models.ForeignKey(
         Operation,
-        verbose_name="operacja",
+        verbose_name="operacja (pojedyncza, zgodność wsteczna)",
         related_name="videos",
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
+    )
+    operations = models.ManyToManyField(
+        Operation,
+        verbose_name="operacje do analizy",
+        related_name="analysis_videos",
+        blank=True,
     )
     file = models.FileField("plik wideo", upload_to="videos/%Y/%m/%d/")
     anonymized_file = models.FileField(
@@ -145,13 +162,31 @@ class Video(models.Model):
     def __str__(self):
         return self.original_filename
 
+    def analysis_operations(self):
+        """Operacje objęte analizą: wybrane operacje, a w razie ich braku
+        pojedyncza operacja (zgodność wsteczna)."""
+        ops = list(self.operations.all())
+        if ops:
+            return ops
+        return [self.operation] if self.operation_id else []
+
+    def analysis_process(self):
+        if self.process_id:
+            return self.process
+        ops = self.analysis_operations()
+        return ops[0].process if ops else None
+
+    @property
+    def is_multi_operation(self):
+        return len(self.analysis_operations()) > 1
+
 
 class Analysis(models.Model):
     class Status(models.TextChoices):
-        QUEUED = "queued", "W kolejce"
-        RUNNING = "running", "Analiza"
-        COMPLETED = "completed", "Zakończono"
-        FAILED = "failed", "Błąd"
+        QUEUED = "queued", _("W kolejce")
+        RUNNING = "running", _("Analiza")
+        COMPLETED = "completed", _("Zakończono")
+        FAILED = "failed", _("Błąd")
 
     video = models.ForeignKey(
         Video,
@@ -203,17 +238,26 @@ class AnalysisSegment(TimeStampedModel):
     )
     activity = models.ForeignKey(
         Activity,
-        verbose_name="czynność",
+        verbose_name=_("czynność"),
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
     )
+    operation = models.ForeignKey(
+        Operation,
+        verbose_name=_("operacja"),
+        related_name="segments",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    operation_name = models.CharField("nazwa operacji", max_length=200, blank=True)
     activity_name = models.CharField("nazwa czynności", max_length=200)
-    start_seconds = models.DecimalField("od", max_digits=10, decimal_places=2)
-    end_seconds = models.DecimalField("do", max_digits=10, decimal_places=2)
-    confidence = models.FloatField("pewność", default=0.0)
-    reason = models.TextField("uzasadnienie", blank=True)
-    is_approved = models.BooleanField("zatwierdzony", default=False)
+    start_seconds = models.DecimalField(_("od"), max_digits=10, decimal_places=2)
+    end_seconds = models.DecimalField(_("do"), max_digits=10, decimal_places=2)
+    confidence = models.FloatField(_("pewność"), default=0.0)
+    reason = models.TextField(_("uzasadnienie"), blank=True)
+    is_approved = models.BooleanField(_("zatwierdzony"), default=False)
 
     class Meta:
         ordering = ["start_seconds", "id"]
@@ -231,7 +275,7 @@ class AnalysisSegment(TimeStampedModel):
 class ActivityHint(TimeStampedModel):
     activity = models.ForeignKey(
         Activity,
-        verbose_name="czynność",
+        verbose_name=_("czynność"),
         related_name="hints",
         on_delete=models.CASCADE,
     )

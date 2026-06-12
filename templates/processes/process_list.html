@@ -1,19 +1,19 @@
 {% extends "base.html" %}
+{% load i18n %}
 {% load process_tags %}
 
-{% block title %}Procesy{% endblock %}
+{% block title %}{% trans "Procesy" %}{% endblock %}
 
 {% block content %}
 <section class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
   <div>
-    <p class="eyebrow">Demo GenAI Video</p>
-    <h1>Procesy</h1>
-    <p class="lead">Definiuj procesy, operacje i zamkniętą listę czynności, a następnie analizuj nagrania.</p>
+    <h1 class="text-3xl sm:text-4xl">{% trans "Procesy" %}</h1>
+    <p class="lead">{% trans "Definiuj procesy, operacje i zamkniętą listę czynności, a następnie analizuj nagrania." %}</p>
   </div>
   <div class="flex items-center gap-2">
     <a class="btn primary" href="{% url 'process_create' %}">
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-      Dodaj proces
+      {% trans "Dodaj proces" %}
     </a>
   </div>
 </section>
@@ -40,9 +40,13 @@
           </div>
         </dl>
         <div class="flex items-center gap-2 mt-auto">
-          <a class="btn primary small flex-1" href="{{ process.get_absolute_url }}">Otwórz</a>
-          <a class="btn ghost small" href="{% url 'process_edit' process.pk %}">Edytuj</a>
-          <a class="btn ghost small text-red-600 hover:bg-red-50 hover:border-red-200" href="{% url 'process_delete' process.pk %}">Usuń</a>
+          <a class="btn primary small flex-1" href="{{ process.get_absolute_url }}">{% trans "Otwórz" %}</a>
+          <a class="btn ghost small" href="{% url 'process_edit' process.pk %}" title="{% trans 'Edytuj' %}" aria-label="{% trans 'Edytuj' %}">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+          </a>
+          <a class="btn ghost small text-red-600 hover:bg-red-50 hover:border-red-200" href="{% url 'process_delete' process.pk %}" title="{% trans 'Usuń' %}" aria-label="{% trans 'Usuń' %}">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+          </a>
         </div>
       </article>
     {% endfor %}
@@ -52,9 +56,9 @@
     <span class="grid place-items-center h-12 w-12 rounded-full bg-primary-50 text-primary">
       <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25A2.25 2.25 0 0113.5 8.25V6z"/></svg>
     </span>
-    <h2>Brak procesów</h2>
-    <p>Dodaj pierwszy proces albo załaduj dane przykładowe poleceniem <code class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">python3 manage.py seed_demo</code>.</p>
-    <a class="btn primary" href="{% url 'process_create' %}">Dodaj proces</a>
+    <h2>{% trans "Brak procesów" %}</h2>
+    <p>{% trans "Dodaj pierwszy proces albo załaduj dane przykładowe poleceniem" %} <code class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">python3 manage.py seed_demo</code>.</p>
+    <a class="btn primary" href="{% url 'process_create' %}">{% trans "Dodaj proces" %}</a>
   </div>
 {% endif %}
 {% endblock %}

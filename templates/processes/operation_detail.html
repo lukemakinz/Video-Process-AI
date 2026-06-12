@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% load i18n %}
 
 {% block title %}{{ operation.name }}{% endblock %}
 
 {% block breadcrumbs %}
-<nav class="crumbs" aria-label="Ścieżka">
-  <a href="{% url 'process_list' %}">Procesy</a>
+<nav class="crumbs" aria-label="{% trans 'Ścieżka' %}">
+  <a href="{% url 'process_list' %}">{% trans "Procesy" %}</a>
   <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
   <a href="{{ operation.process.get_absolute_url }}">{{ operation.process.name }}</a>
   <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
@@ -20,14 +21,14 @@
     <p class="lead">{{ operation.description|default:"Brak opisu operacji." }}</p>
   </div>
   <div class="flex flex-wrap items-center gap-2 shrink-0">
-    <a class="btn ghost" href="{% url 'operation_edit' operation.pk %}">Edytuj</a>
+    <a class="btn ghost" href="{% url 'operation_edit' operation.pk %}">{% trans "Edytuj" %}</a>
     <a class="btn ghost" href="{% url 'activity_create' operation.pk %}">
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-      Dodaj czynność
+      {% trans "Dodaj czynność" %}
     </a>
     <a class="btn primary" href="{% url 'operation_video_upload' operation.pk %}">
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/></svg>
-      Analizuj film
+      {% trans "Analizuj film" %}
     </a>
   </div>
 </section>
@@ -35,29 +36,29 @@
 {% if operation.activities.all %}
   <div class="rounded-xl border border-primary-100 bg-primary-50 p-4 sm:p-5 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <div>
-      <p class="font-medium text-primary-800">Operacja gotowa do analizy</p>
-      <p class="text-sm text-primary-700/80">Wgraj nagranie tej operacji — Gemini przypisze fragmenty do zdefiniowanych czynności.</p>
+      <p class="font-medium text-primary-800">{% trans "Operacja gotowa do analizy" %}</p>
+      <p class="text-sm text-primary-700/80">{% trans "Wgraj nagranie tej operacji — Gemini przypisze fragmenty do zdefiniowanych czynności." %}</p>
     </div>
     <a class="btn primary shrink-0" href="{% url 'operation_video_upload' operation.pk %}">
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
-      Wgraj nagranie do analizy
+      {% trans "Wgraj nagranie do analizy" %}
     </a>
   </div>
 {% else %}
   <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <div>
-      <p class="font-medium text-amber-800">Najpierw zdefiniuj czynności</p>
-      <p class="text-sm text-amber-700/80">Analiza wymaga zamkniętej listy czynności — to jedyne kategorie, które rozpozna model.</p>
+      <p class="font-medium text-amber-800">{% trans "Najpierw zdefiniuj czynności" %}</p>
+      <p class="text-sm text-amber-700/80">{% trans "Analiza wymaga zamkniętej listy czynności — to jedyne kategorie, które rozpozna model." %}</p>
     </div>
-    <a class="btn secondary shrink-0" href="{% url 'activity_create' operation.pk %}">Dodaj czynność</a>
+    <a class="btn secondary shrink-0" href="{% url 'activity_create' operation.pk %}">{% trans "Dodaj czynność" %}</a>
   </div>
 {% endif %}
 
 <section class="panel">
   <div class="panel-head">
     <div>
-      <h2>Czynności przypisane do operacji</h2>
-      <p class="muted text-sm mt-1">Gemini wybiera wyłącznie spośród tych czynności — to zamknięta lista.</p>
+      <h2>{% trans "Czynności przypisane do operacji" %}</h2>
+      <p class="muted text-sm mt-1">{% trans "Gemini wybiera wyłącznie spośród tych czynności — to zamknięta lista." %}</p>
     </div>
     <span class="pill">{{ operation.activities.count }} pozycji</span>
   </div>
@@ -67,11 +68,11 @@
         <thead>
           <tr>
             <th class="w-28">Kolejność</th>
-            <th>Nazwa</th>
-            <th>Wykonawca</th>
-            <th>Opis</th>
+            <th>{% trans "Nazwa" %}</th>
+            <th>{% trans "Wykonawca" %}</th>
+            <th>{% trans "Opis" %}</th>
             <th class="text-right">Min.</th>
-            <th class="text-right">Akcje</th>
+            <th class="text-right">{% trans "Akcje" %}</th>
           </tr>
         </thead>
         <tbody>
@@ -94,8 +95,8 @@
               <td class="text-right font-mono text-slate-600">{{ activity.minimum_duration_seconds|default:"—" }}{% if activity.minimum_duration_seconds %} s{% endif %}</td>
               <td>
                 <div class="flex items-center justify-end gap-2">
-                  <a class="btn ghost small" href="{% url 'activity_edit' activity.pk %}">Edytuj</a>
-                  <a class="btn ghost small text-red-600 hover:bg-red-50 hover:border-red-200" href="{% url 'activity_delete' activity.pk %}">Usuń</a>
+                  <a class="btn ghost small" href="{% url 'activity_edit' activity.pk %}">{% trans "Edytuj" %}</a>
+                  <a class="btn ghost small text-red-600 hover:bg-red-50 hover:border-red-200" href="{% url 'activity_delete' activity.pk %}">{% trans "Usuń" %}</a>
                 </div>
               </td>
             </tr>
@@ -105,27 +106,27 @@
     </div>
   {% else %}
     <div class="empty-state compact">
-      <p>Dodaj zamkniętą listę czynności. Gemini będzie mogło wybierać tylko spośród nich.</p>
-      <a class="btn primary" href="{% url 'activity_create' operation.pk %}">Dodaj czynność</a>
+      <p>{% trans "Dodaj zamkniętą listę czynności. Gemini będzie mogło wybierać tylko spośród nich." %}</p>
+      <a class="btn primary" href="{% url 'activity_create' operation.pk %}">{% trans "Dodaj czynność" %}</a>
     </div>
   {% endif %}
 </section>
 
 <section class="panel">
   <div class="panel-head">
-    <h2>Ostatnie nagrania</h2>
-    <a class="btn ghost small" href="{% url 'operation_video_upload' operation.pk %}">Wgraj nowe</a>
+    <h2>{% trans "Ostatnie nagrania" %}</h2>
+    <a class="btn ghost small" href="{% url 'operation_video_upload' operation.pk %}">{% trans "Wgraj nowe" %}</a>
   </div>
   {% if videos %}
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Plik</th>
-            <th>Status</th>
-            <th class="text-right">Czas</th>
-            <th>Utworzono</th>
-            <th class="text-right">Akcje</th>
+            <th>{% trans "Plik" %}</th>
+            <th>{% trans "Status" %}</th>
+            <th class="text-right">{% trans "Czas" %}</th>
+            <th>{% trans "Utworzono" %}</th>
+            <th class="text-right">{% trans "Akcje" %}</th>
           </tr>
         </thead>
         <tbody>
@@ -135,14 +136,14 @@
               <td>{% include "processes/_status_badge.html" with code=video.status label=video.get_status_display %}</td>
               <td class="text-right font-mono text-slate-600">{{ video.duration_seconds|default:"—" }}{% if video.duration_seconds %} s{% endif %}</td>
               <td class="font-mono text-slate-500">{{ video.created_at|date:"Y-m-d H:i" }}</td>
-              <td class="text-right"><a class="btn ghost small" href="{% url 'video_review' video.pk %}">Podgląd</a></td>
+              <td class="text-right"><a class="btn ghost small" href="{% url 'video_review' video.pk %}">{% trans "Podgląd" %}</a></td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   {% else %}
-    <p class="muted text-sm">Nie wgrano jeszcze nagrań dla tej operacji.</p>
+    <p class="muted text-sm">{% trans "Nie wgrano jeszcze nagrań dla tej operacji." %}</p>
   {% endif %}
 </section>
 {% endblock %}

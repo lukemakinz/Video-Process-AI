@@ -8,12 +8,14 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 
 from .forms import (
     ActivityForm,
     OperationForm,
     ProcessForm,
+    ProcessVideoUploadForm,
     SegmentCorrectionForm,
     VideoUploadForm,
 )
@@ -22,6 +24,7 @@ from .services import (
     analysis_summary,
     anonymize_video,
     assist_activity,
+    clone_operation,
     get_video_duration_seconds,
     run_analysis_in_background,
     segments_needing_review,
@@ -41,12 +44,12 @@ def process_create(request):
     form = ProcessForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         process = form.save()
-        messages.success(request, "Proces został utworzony.")
+        messages.success(request, _("Proces został utworzony."))
         return redirect(process)
     return render(
         request,
         "processes/form.html",
-        {"form": form, "title": "Dodaj proces", "submit_label": "Zapisz proces"},
+        {"form": form, "title": _("Dodaj proces"), "submit_label": _("Zapisz proces")},
     )
 
 
@@ -60,12 +63,12 @@ def process_edit(request, pk):
     form = ProcessForm(request.POST or None, instance=process)
     if request.method == "POST" and form.is_valid():
         process = form.save()
-        messages.success(request, "Proces został zaktualizowany.")
+        messages.success(request, _("Proces został zaktualizowany."))
         return redirect(process)
     return render(
         request,
         "processes/form.html",
-        {"form": form, "title": "Edytuj proces", "submit_label": "Zapisz zmiany"},
+        {"form": form, "title": _("Edytuj proces"), "submit_label": _("Zapisz zmiany")},
     )
 
 
@@ -73,12 +76,42 @@ def process_delete(request, pk):
     process = get_object_or_404(Process, pk=pk)
     if request.method == "POST":
         process.delete()
-        messages.success(request, "Proces został usunięty.")
+        messages.success(request, _("Proces został usunięty."))
         return redirect("process_list")
     return render(
         request,
         "processes/confirm_delete.html",
-        {"object": process, "title": "Usuń proces", "cancel_url": process.get_absolute_url()},
+        {"object": process, "title": _("Usuń proces"), "cancel_url": process.get_absolute_url()},
+    )
+
+
+def operation_import(request, process_id):
+    process = get_object_or_404(Process, pk=process_id)
+    if request.method == "POST":
+        ids = request.POST.getlist("operations")
+        sources = Operation.objects.filter(pk__in=ids).prefetch_related("activities")
+        count = 0
+        for source in sources:
+            clone_operation(source, process)
+            count += 1
+        if count:
+            messages.success(
+                request,
+                _("Zaimportowano %(count)d operacji jako duplikaty.") % {"count": count},
+            )
+        else:
+            messages.warning(request, _("Nie wybrano żadnej operacji."))
+        return redirect(process)
+    operations = (
+        Operation.objects.exclude(process=process)
+        .select_related("process")
+        .prefetch_related("activities")
+        .order_by("process__name", "order")
+    )
+    return render(
+        request,
+        "processes/operation_import.html",
+        {"process": process, "operations": operations},
     )
 
 
@@ -90,15 +123,15 @@ def operation_create(request, process_id):
         operation = form.save(commit=False)
         operation.process = process
         operation.save()
-        messages.success(request, "Operacja została dodana.")
+        messages.success(request, _("Operacja została dodana."))
         return redirect(operation)
     return render(
         request,
         "processes/form.html",
         {
             "form": form,
-            "title": f"Dodaj operację: {process.name}",
-            "submit_label": "Zapisz operację",
+            "title": _("Dodaj operację: %(name)s") % {"name": process.name},
+            "submit_label": _("Zapisz operację"),
             "cancel_url": process.get_absolute_url(),
         },
     )
@@ -122,15 +155,15 @@ def operation_edit(request, pk):
     form = OperationForm(request.POST or None, instance=operation)
     if request.method == "POST" and form.is_valid():
         operation = form.save()
-        messages.success(request, "Operacja została zaktualizowana.")
+        messages.success(request, _("Operacja została zaktualizowana."))
         return redirect(operation)
     return render(
         request,
         "processes/form.html",
         {
             "form": form,
-            "title": "Edytuj operację",
-            "submit_label": "Zapisz zmiany",
+            "title": _("Edytuj operację"),
+            "submit_label": _("Zapisz zmiany"),
             "cancel_url": operation.get_absolute_url(),
         },
     )
@@ -142,12 +175,12 @@ def operation_delete(request, pk):
     process_url = operation.process.get_absolute_url()
     if request.method == "POST":
         operation.delete()
-        messages.success(request, "Operacja została usunięta.")
+        messages.success(request, _("Operacja została usunięta."))
         return redirect(process_url)
     return render(
         request,
         "processes/confirm_delete.html",
-        {"object": operation, "title": "Usuń operację", "cancel_url": cancel_url},
+        {"object": operation, "title": _("Usuń operację"), "cancel_url": cancel_url},
     )
 
 
@@ -208,7 +241,7 @@ def _activity_form(request, operation, activity=None):
         name = (request.POST.get("name") or "").strip()
         if not name:
             form.add_error("name", "Najpierw wpisz nazwę czynności, żeby AI wiedziało, co opisać.")
-            messages.error(request, "Wpisz nazwę czynności przed użyciem AI.")
+            messages.error(request, _("Wpisz nazwę czynności przed użyciem AI."))
             return render(
                 request,
                 "processes/activity_form.html",
@@ -217,7 +250,7 @@ def _activity_form(request, operation, activity=None):
                     "operation": operation,
                     "activity": activity,
                     "suggestion": suggestion,
-                    "title": "Edytuj czynność" if activity else "Dodaj czynność",
+                    "title": _("Edytuj czynność") if activity else _("Dodaj czynność"),
                     "ai_available": ai_available,
                     "ai_mock_enabled": settings.OPENAI_USE_MOCK,
                 },
@@ -239,9 +272,9 @@ def _activity_form(request, operation, activity=None):
                 if suggestion.get(field_name):
                     data[field_name] = suggestion[field_name]
             form = ActivityForm(data, instance=activity)
-            messages.info(request, "AI przygotowało propozycję. Zapisz ją dopiero po akceptacji.")
+            messages.info(request, _("AI przygotowało propozycję. Zapisz ją dopiero po akceptacji."))
         except Exception as exc:
-            messages.error(request, f"Nie udało się wygenerować opisu AI: {exc}")
+            messages.error(request, _("Nie udało się wygenerować opisu AI: %(error)s") % {"error": exc})
     elif request.method == "POST" and form.is_valid():
         activity_obj = form.save(commit=False)
         activity_obj.operation = operation
@@ -249,7 +282,7 @@ def _activity_form(request, operation, activity=None):
             current_max = operation.activities.aggregate(m=Max("order"))["m"] or 0
             activity_obj.order = current_max + 1
         activity_obj.save()
-        messages.success(request, "Czynność została zapisana.")
+        messages.success(request, _("Czynność została zapisana."))
         return redirect(operation)
 
     return render(
@@ -260,7 +293,7 @@ def _activity_form(request, operation, activity=None):
             "operation": operation,
             "activity": activity,
             "suggestion": suggestion,
-            "title": "Edytuj czynność" if activity else "Dodaj czynność",
+            "title": _("Edytuj czynność") if activity else _("Dodaj czynność"),
             "ai_available": ai_available,
             "ai_mock_enabled": settings.OPENAI_USE_MOCK,
         },
@@ -272,12 +305,12 @@ def activity_delete(request, pk):
     operation = activity.operation
     if request.method == "POST":
         activity.delete()
-        messages.success(request, "Czynność została usunięta.")
+        messages.success(request, _("Czynność została usunięta."))
         return redirect(operation)
     return render(
         request,
         "processes/confirm_delete.html",
-        {"object": activity, "title": "Usuń czynność", "cancel_url": operation.get_absolute_url()},
+        {"object": activity, "title": _("Usuń czynność"), "cancel_url": operation.get_absolute_url()},
     )
 
 
@@ -331,7 +364,7 @@ def video_upload(request, operation_id=None):
             video.duration_seconds = get_video_duration_seconds(video.file.path)
             video.save(update_fields=["duration_seconds"])
         except Exception as exc:
-            messages.warning(request, f"Nie udało się odczytać czasu trwania przez FFmpeg: {exc}")
+            messages.warning(request, _("Nie udało się odczytać czasu trwania przez FFmpeg: %(error)s") % {"error": exc})
         try:
             anonymize_video(video)
             messages.success(
@@ -339,13 +372,48 @@ def video_upload(request, operation_id=None):
                 "Film został zanonimizowany. Sprawdź podgląd i zatwierdź analizę.",
             )
         except Exception as exc:
-            messages.error(request, f"Anonimizacja nie powiodła się: {exc}")
+            messages.error(request, _("Anonimizacja nie powiodła się: %(error)s") % {"error": exc})
         return redirect("video_review", pk=video.pk)
 
     return render(
         request,
         "processes/video_upload.html",
         {"form": form, "operation": operation},
+    )
+
+
+def process_video_upload(request, process_id):
+    process = get_object_or_404(Process.objects.prefetch_related("operations"), pk=process_id)
+    form = ProcessVideoUploadForm(
+        request.POST or None, request.FILES or None, process=process
+    )
+    if request.method == "POST" and form.is_valid():
+        video = form.save(commit=False)
+        uploaded_file = form.cleaned_data["file"]
+        video.original_filename = uploaded_file.name
+        video.process = process
+        video.status = Video.Status.UPLOADED
+        video.save()
+        video.operations.set(form.cleaned_data["operations"])
+        try:
+            video.duration_seconds = get_video_duration_seconds(video.file.path)
+            video.save(update_fields=["duration_seconds"])
+        except Exception as exc:
+            messages.warning(request, _("Nie udało się odczytać czasu trwania przez FFmpeg: %(error)s") % {"error": exc})
+        try:
+            anonymize_video(video)
+            messages.success(
+                request,
+                "Film został zanonimizowany. Sprawdź podgląd i zatwierdź analizę.",
+            )
+        except Exception as exc:
+            messages.error(request, _("Anonimizacja nie powiodła się: %(error)s") % {"error": exc})
+        return redirect("video_review", pk=video.pk)
+
+    return render(
+        request,
+        "processes/process_video_upload.html",
+        {"form": form, "process": process},
     )
 
 
@@ -369,17 +437,17 @@ def video_reanonymize(request, pk):
         pk=pk,
     )
     if video.status == Video.Status.ANALYZING:
-        messages.error(request, "Nie można ponowić anonimizacji w trakcie analizy.")
+        messages.error(request, _("Nie można ponowić anonimizacji w trakcie analizy."))
         return redirect("video_review", pk=video.pk)
     if not video.file:
-        messages.error(request, "Brakuje oryginalnego pliku wideo.")
+        messages.error(request, _("Brakuje oryginalnego pliku wideo."))
         return redirect("video_review", pk=video.pk)
 
     try:
         anonymize_video(video)
-        messages.success(request, "Anonimizacja została ponowiona z oryginalnego pliku.")
+        messages.success(request, _("Anonimizacja została ponowiona z oryginalnego pliku."))
     except Exception as exc:
-        messages.error(request, f"Ponowna anonimizacja nie powiodła się: {exc}")
+        messages.error(request, _("Ponowna anonimizacja nie powiodła się: %(error)s") % {"error": exc})
     return redirect("video_review", pk=video.pk)
 
 
@@ -400,17 +468,18 @@ def video_approve_and_analyze(request, pk):
         pk=pk,
     )
     if not video.anonymized_file:
-        messages.error(request, "Brakuje pliku po anonimizacji. Analiza została zablokowana.")
+        messages.error(request, _("Brakuje pliku po anonimizacji. Analiza została zablokowana."))
         return redirect("video_review", pk=video.pk)
-    if not video.operation.activities.exists():
-        messages.error(request, "Najpierw zdefiniuj czynności dla tej operacji.")
-        return redirect(video.operation)
+    operations = video.analysis_operations()
+    if not operations or not any(op.activities.exists() for op in operations):
+        messages.error(request, _("Żadna z wybranych operacji nie ma zdefiniowanych czynności."))
+        return redirect("video_review", pk=video.pk)
 
     video.status = Video.Status.ANALYZING
     video.approved_for_analysis_at = timezone.now()
     video.save(update_fields=["status", "approved_for_analysis_at"])
     run_analysis_in_background(video)
-    messages.info(request, "Analiza została uruchomiona. Wynik pojawi się automatycznie.")
+    messages.info(request, _("Analiza została uruchomiona. Wynik pojawi się automatycznie."))
     return redirect("video_review", pk=video.pk)
 
 
@@ -423,10 +492,11 @@ def analysis_detail(request, pk):
         ).prefetch_related("segments", "video__operation__activities"),
         pk=pk,
     )
-    operation = analysis.video.operation
+    operations = analysis.video.analysis_operations()
+    operation = operations[0] if operations else None
     segment_forms = [
-        (segment, SegmentCorrectionForm(instance=segment, operation=operation))
-        for segment in analysis.segments.select_related("activity")
+        (segment, SegmentCorrectionForm(instance=segment, operation=segment.operation or operation))
+        for segment in analysis.segments.select_related("activity", "operation")
     ]
     cost = None
     if analysis.estimated_cost is not None:
@@ -451,23 +521,10 @@ def analysis_detail(request, pk):
             "cost": cost,
             "needs_review": needs_review,
             "operation": operation,
+            "operations": operations,
             "approved_count": approved_count,
         },
     )
-
-
-@require_POST
-def analysis_approve_all(request, pk):
-    analysis = get_object_or_404(Analysis, pk=pk)
-    updated = analysis.segments.filter(is_approved=False).update(
-        is_approved=True,
-        updated_at=timezone.now(),
-    )
-    if updated:
-        messages.success(request, f"Zatwierdzono {updated} segment(y).")
-    else:
-        messages.info(request, "Wszystkie segmenty były już zatwierdzone.")
-    return redirect("analysis_detail", pk=analysis.pk)
 
 
 def analysis_export_csv(request, pk):
@@ -514,15 +571,21 @@ def segment_reassign(request, analysis_pk, segment_pk):
         pk=analysis_pk,
     )
     segment = get_object_or_404(analysis.segments, pk=segment_pk)
-    operation = analysis.video.operation
-    activity = get_object_or_404(operation.activities, pk=request.POST.get("activity"))
+    operations = analysis.video.analysis_operations()
+    activity = get_object_or_404(
+        Activity, pk=request.POST.get("activity"), operation__in=operations
+    )
     segment.activity = activity
     segment.activity_name = activity.name
-    segment.save(update_fields=["activity", "activity_name", "updated_at"])
+    segment.operation = activity.operation
+    segment.operation_name = activity.operation.name
+    segment.save(
+        update_fields=["activity", "activity_name", "operation", "operation_name", "updated_at"]
+    )
     return render(
         request,
         "processes/_segment_activity_cell.html",
-        {"analysis": analysis, "segment": segment, "operation": operation, "saved": True},
+        {"analysis": analysis, "segment": segment, "operation": activity.operation, "saved": True},
     )
 
 
@@ -591,7 +654,7 @@ def segment_update(request, analysis_pk, segment_pk):
     )
     if form.is_valid():
         form.save()
-        messages.success(request, "Segment został zaktualizowany.")
+        messages.success(request, _("Segment został zaktualizowany."))
     else:
-        messages.error(request, "Nie udało się zapisać segmentu. Sprawdź wartości czasu.")
+        messages.error(request, _("Nie udało się zapisać segmentu. Sprawdź wartości czasu."))
     return redirect(reverse("analysis_detail", kwargs={"pk": analysis.pk}) + f"#segment-{segment.pk}")

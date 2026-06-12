@@ -153,6 +153,20 @@ Ewentualne pola modelu (np. znacznik zatwierdzenia całej analizy) ustalimy na p
 
 ---
 
+## Etap 5 — Film procesu z wieloma operacjami (ZBUDOWANE)
+
+Analiza przeniesiona z poziomu pojedynczej operacji na poziom procesu z wybranymi `1..N` operacjami (mogą występować równolegle, np. różni pracownicy / stanowiska).
+
+- **Model:** `Video.process` (FK), `Video.operations` (M2M), `Video.operation` opcjonalne (zgodność wsteczna); `AnalysisSegment.operation` + `operation_name`. Helpery `Video.analysis_operations()`, `analysis_process()`, `is_multi_operation`.
+- **Wejście:** ze strony procesu „Analizuj film" → multi-select operacji (`process_video_upload`, `ProcessVideoUploadForm`). Pojedyncza operacja nadal działa (przypadek jednej zaznaczonej).
+- **Prompt (pro):** `build_multi_operation_prompt` — najpierw rozpoznaj OPERACJĘ (po stanowisku/strefie), potem czynność; segmenty różnych operacji mogą się nakładać; kolejność czynności to miękka podpowiedź z jawnymi przykładami nieliniowości (powrót 2→1, „następną NIE jest 5 bo poprawka przy 1"); niepewność → „niepewne".
+- **Pipeline:** `_normalize_multi_segments` (brak nakładania tylko w obrębie tej samej operacji), `_mock_multi_segments`, routing w `run_video_analysis`.
+- **Oś czasu:** kolor per operacja + legenda; kolumna „Operacja" w tabeli; szybka zmiana czynności ograniczona do operacji segmentu.
+
+Ograniczenia (świadome): atrybucja po operacji/stanowisku, nie po tożsamości operatora; precyzja granic czasu pozostaje ryzykiem; walidacja na realnym nagraniu zalecana przed produkcją.
+
+---
+
 ## Poza zakresem (na teraz)
 
 - Własny model CV/YOLO, trening modeli, integracja MES/PLC.

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}Analizuj film — {{ process.name }}{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="crumbs" aria-label="{% trans 'Ścieżka' %}">
+  <a href="{% url 'process_list' %}">{% trans "Procesy" %}</a>
+  <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+  <a href="{{ process.get_absolute_url }}">{{ process.name }}</a>
+  <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+  <span class="current">{% trans "Analizuj film" %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="mb-6">
+  <p class="eyebrow">Proces: {{ process.name }}</p>
+  <h1>{% trans "Analizuj film procesu" %}</h1>
+  <p class="lead">{% trans "Zaznacz operacje, które mogą wystąpić na nagraniu (równolegle, np. różni pracownicy). Model przypisze fragmenty do operacji i ich czynności." %}</p>
+</section>
+
+<form method="post" enctype="multipart/form-data" class="panel narrow max-w-2xl">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+
+  <div class="field">
+    <label>{% trans "Operacje do analizy" %} <span class="text-red-500">*</span></label>
+    {% if form.operations.field.queryset %}
+      <div class="grid sm:grid-cols-2 gap-2 mt-1">
+        {% for checkbox in form.operations %}
+          <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
+            {{ checkbox.tag }}
+            <span class="text-sm text-slate-700">{{ checkbox.choice_label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="note">Ten proces nie ma jeszcze operacji. <a class="text-primary hover:underline" href="{% url 'operation_create' process.pk %}">{% trans "Dodaj operację" %}</a>.</p>
+    {% endif %}
+    {% if form.operations.help_text %}<p class="help">{{ form.operations.help_text }}</p>{% endif %}
+    {% for error in form.operations.errors %}<p class="error">{{ error }}</p>{% endfor %}
+  </div>
+
+  <div class="field">
+    <label for="{{ form.file.id_for_label }}">{{ form.file.label }} <span class="text-red-500">*</span></label>
+    {{ form.file }}
+    {% for error in form.file.errors %}<p class="error">{{ error }}</p>{% endfor %}
+  </div>
+
+  <div class="note">
+    {% trans "Obsługiwane formaty:" %} <strong>MP4, MOV</strong>. Do Gemini trafia tylko zatwierdzona wersja po anonimizacji.
+  </div>
+
+  <div class="flex items-center gap-2 pt-2">
+    <button class="btn primary" type="submit">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+      {% trans "Wgraj i anonimizuj" %}
+    </button>
+    <a class="btn ghost" href="{{ process.get_absolute_url }}">{% trans "Anuluj" %}</a>
+  </div>
+</form>
+{% endblock %}

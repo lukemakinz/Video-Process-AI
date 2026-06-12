@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% load i18n %}
 
 {% block title %}{{ process.name }}{% endblock %}
 
 {% block breadcrumbs %}
-<nav class="crumbs" aria-label="Ścieżka">
-  <a href="{% url 'process_list' %}">Procesy</a>
+<nav class="crumbs" aria-label="{% trans 'Ścieżka' %}">
+  <a href="{% url 'process_list' %}">{% trans "Procesy" %}</a>
   <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
   <span class="current">{{ process.name }}</span>
 </nav>
@@ -16,18 +17,28 @@
     <h1>{{ process.name }}</h1>
     <p class="lead">{{ process.description|default:"Brak opisu procesu." }}</p>
   </div>
-  <div class="flex items-center gap-2 shrink-0">
-    <a class="btn ghost" href="{% url 'process_edit' process.pk %}">Edytuj</a>
-    <a class="btn primary" href="{% url 'operation_create' process.pk %}">
+  <div class="flex flex-wrap items-center gap-2 shrink-0">
+    <a class="btn ghost" href="{% url 'process_edit' process.pk %}">{% trans "Edytuj" %}</a>
+    <a class="btn ghost" href="{% url 'operation_create' process.pk %}">
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-      Dodaj operację
+      {% trans "Dodaj operację" %}
     </a>
+    <a class="btn ghost" href="{% url 'operation_import' process.pk %}">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m2.25-8.25H18A2.25 2.25 0 0120.25 10.5V18A2.25 2.25 0 0118 20.25h-7.5A2.25 2.25 0 018.25 18v-7.5A2.25 2.25 0 0110.5 8.25z"/></svg>
+      {% trans "Importuj operację" %}
+    </a>
+    {% if process.operations.all %}
+      <a class="btn primary" href="{% url 'process_video_upload' process.pk %}">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/></svg>
+        {% trans "Analizuj film" %}
+      </a>
+    {% endif %}
   </div>
 </section>
 
 <section class="panel">
   <div class="panel-head">
-    <h2>Operacje procesu</h2>
+    <h2>{% trans "Operacje procesu" %}</h2>
     <span class="pill">{{ process.operations.all|length }} pozycji</span>
   </div>
   {% if process.operations.all %}
@@ -35,10 +46,10 @@
       <table>
         <thead>
           <tr>
-            <th class="w-28">Kolejność</th>
-            <th>Nazwa</th>
-            <th>Opis</th>
-            <th class="text-right">Akcje</th>
+            <th class="w-28">{% trans "Kolejność" %}</th>
+            <th>{% trans "Nazwa" %}</th>
+            <th>{% trans "Opis" %}</th>
+            <th class="text-right">{% trans "Akcje" %}</th>
           </tr>
         </thead>
         <tbody>
@@ -59,8 +70,8 @@
               <td class="text-slate-500">{{ operation.description|truncatechars:120|default:"—" }}</td>
               <td>
                 <div class="flex items-center justify-end gap-2">
-                  <a class="btn ghost small" href="{{ operation.get_absolute_url }}">Otwórz</a>
-                  <a class="btn primary small" href="{% url 'operation_video_upload' operation.pk %}">Analizuj film</a>
+                  <a class="btn ghost small" href="{{ operation.get_absolute_url }}">{% trans "Otwórz" %}</a>
+                  <a class="btn primary small" href="{% url 'operation_video_upload' operation.pk %}">{% trans "Analizuj film" %}</a>
                 </div>
               </td>
             </tr>
@@ -70,8 +81,8 @@
     </div>
   {% else %}
     <div class="empty-state compact">
-      <p>Ten proces nie ma jeszcze operacji.</p>
-      <a class="btn primary" href="{% url 'operation_create' process.pk %}">Dodaj operację</a>
+      <p>{% trans "Ten proces nie ma jeszcze operacji." %}</p>
+      <a class="btn primary" href="{% url 'operation_create' process.pk %}">{% trans "Dodaj operację" %}</a>
     </div>
   {% endif %}
 </section>

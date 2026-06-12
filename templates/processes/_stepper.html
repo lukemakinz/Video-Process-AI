@@ -1,17 +1,18 @@
 {% comment %}Wskaźnik kroków przepływu analizy. Parametr: current (1/2/3).{% endcomment %}
+{% load i18n %}
 <ol class="flex items-center gap-2 sm:gap-3 mb-6 text-sm">
   <li class="flex items-center gap-2">
     <span class="grid place-items-center h-7 w-7 rounded-full text-xs font-semibold font-mono {% if current >= 1 %}bg-primary text-white{% else %}bg-slate-200 text-slate-500{% endif %}">1</span>
-    <span class="font-medium {% if current == 1 %}text-primary{% elif current > 1 %}text-slate-700{% else %}text-slate-400{% endif %}">Prześlij nagranie</span>
+    <span class="font-medium {% if current == 1 %}text-primary{% elif current > 1 %}text-slate-700{% else %}text-slate-400{% endif %}">{% trans "Prześlij nagranie" %}</span>
   </li>
   <li class="h-px w-6 sm:w-10 {% if current > 1 %}bg-primary{% else %}bg-slate-200{% endif %}"></li>
   <li class="flex items-center gap-2">
     <span class="grid place-items-center h-7 w-7 rounded-full text-xs font-semibold font-mono {% if current >= 2 %}bg-primary text-white{% else %}bg-slate-200 text-slate-500{% endif %}">2</span>
-    <span class="font-medium {% if current == 2 %}text-primary{% elif current > 2 %}text-slate-700{% else %}text-slate-400{% endif %}">Anonimizacja</span>
+    <span class="font-medium {% if current == 2 %}text-primary{% elif current > 2 %}text-slate-700{% else %}text-slate-400{% endif %}">{% trans "Anonimizacja" %}</span>
   </li>
   <li class="h-px w-6 sm:w-10 {% if current > 2 %}bg-primary{% else %}bg-slate-200{% endif %}"></li>
   <li class="flex items-center gap-2">
     <span class="grid place-items-center h-7 w-7 rounded-full text-xs font-semibold font-mono {% if current >= 3 %}bg-primary text-white{% else %}bg-slate-200 text-slate-500{% endif %}">3</span>
-    <span class="font-medium {% if current == 3 %}text-primary{% else %}text-slate-400{% endif %}">Wynik analizy</span>
+    <span class="font-medium {% if current == 3 %}text-primary{% else %}text-slate-400{% endif %}">{% trans "Wynik analizy" %}</span>
   </li>
 </ol>

@@ -11,10 +11,11 @@ from pathlib import Path
 from django.conf import settings
 from django.core.files import File
 from django.db import connection, transaction
+from django.db.models import Max
 from django.utils import timezone
 from django.utils.text import slugify
 
-from .models import Activity, Analysis, AnalysisSegment, Video
+from .models import Activity, Analysis, AnalysisSegment, Operation, Video
 
 
 def quantize_seconds(value):
@@ -205,6 +206,42 @@ def anonymize_video(video):
         raise
 
 
+def _dedupe_operation_name(process, base_name):
+    existing = set(process.operations.values_list("name", flat=True))
+    if base_name not in existing:
+        return base_name
+    index = 2
+    while f"{base_name} ({index})" in existing:
+        index += 1
+    return f"{base_name} ({index})"
+
+
+@transaction.atomic
+def clone_operation(source, target_process):
+    """Tworzy duplikat operacji (wraz z czynnościami) w docelowym procesie.
+    Źródło pozostaje nietknięte; nazwa jest odróżniona, np. 'Malowanie (2)'."""
+    new_name = _dedupe_operation_name(target_process, source.name)
+    next_order = (target_process.operations.aggregate(m=Max("order"))["m"] or 0) + 1
+    new_operation = Operation.objects.create(
+        process=target_process,
+        name=new_name,
+        description=source.description,
+        order=next_order,
+    )
+    for activity in source.activities.all():
+        Activity.objects.create(
+            operation=new_operation,
+            name=activity.name,
+            description=activity.description,
+            recognition_rules=activity.recognition_rules,
+            exclusion_rules=activity.exclusion_rules,
+            performed_by=activity.performed_by,
+            minimum_duration_seconds=activity.minimum_duration_seconds,
+            order=activity.order,
+        )
+    return new_operation
+
+
 def build_analysis_prompt(operation):
     activities = list(operation.activities.all())
     lines = [
@@ -268,6 +305,98 @@ def build_analysis_prompt(operation):
     return "\n".join(lines)
 
 
+def _render_activity_block(index, activity):
+    minimum = (
+        f"{activity.minimum_duration_seconds}s"
+        if activity.minimum_duration_seconds is not None
+        else "brak"
+    )
+    block = [
+        f"  {index}. {activity.name}",
+        f"     Opis: {activity.description or 'brak'}",
+        f"     Rozpoznaj, gdy: {activity.recognition_rules or 'brak'}",
+        f"     Nie rozpoznawaj, gdy: {activity.exclusion_rules or 'brak'}",
+        f"     Minimalny czas trwania: {minimum}",
+        f"     Wykonawca: {activity.get_performed_by_display()}",
+    ]
+    active_hints = list(activity.hints.filter(is_active=True))
+    if active_hints:
+        block.append("     Wskazówki z wcześniejszych korekt:")
+        for hint in active_hints:
+            suffix = f" (bywa mylone z: {hint.confused_with.name})" if hint.confused_with else ""
+            block.append(f"     - {hint.text}{suffix}")
+    return block
+
+
+def build_multi_operation_prompt(process, operations):
+    """Prompt do analizy nagrania procesu, na którym może równolegle występować
+    wiele operacji (różni pracownicy / różne stanowiska)."""
+    lines = [
+        f'Analizujesz zanonimizowane nagranie procesu "{process.name}".',
+        "Na nagraniu RÓWNOLEGLE mogą występować różne operacje wykonywane przez różnych pracowników lub na różnych stanowiskach.",
+        "",
+        "ZADANIE: podziel nagranie na segmenty. Dla każdego segmentu podaj operację, czynność w tej operacji, czas trwania, pewność i krótkie uzasadnienie.",
+        "",
+        "ZASADY NADRZĘDNE:",
+        "1. Najpierw rozpoznaj OPERACJĘ (po stanowisku, strefie kadru i charakterze pracy), dopiero potem CZYNNOŚĆ w obrębie tej operacji.",
+        "2. Używaj wyłącznie nazw operacji i czynności z list poniżej. Nie twórz nowych nazw. Nie zgaduj.",
+        "3. Operacje mogą dziać się RÓWNOLEGLE — segmenty różnych operacji MOGĄ nakładać się w czasie. Segmenty TEJ SAMEJ operacji nie nakładają się.",
+        "4. Kolejność czynności w operacji to PODPOWIEDŹ, nie sztywna reguła. Realna praca bywa nieliniowa, na przykład:",
+        "   - możesz wykonać czynność 2, a potem wrócić do czynności 1 (poprawka),",
+        "   - możesz być w czynności 4, a następną NIE jest 5, bo trzeba poprawić coś z czynności 1,",
+        "   - czynności mogą się powtarzać, być pomijane lub przeplatane.",
+        "   Kieruj się tym, co realnie widać, a nie zakładaną sekwencją.",
+        '5. Gdy nie możesz pewnie określić operacji lub czynności — wybierz czynność "niepewne" (jeśli dostępna) zamiast zgadywać i obniż confidence.',
+        "6. Przerwy, brak pracy i czekanie oznaczaj odpowiednią czynnością, jeśli jest zdefiniowana.",
+        "",
+        "Zwróć wyłącznie poprawny JSON zgodny ze schematem:",
+        '{"segments":[{"operation":"nazwa operacji","activity":"nazwa czynności","start_seconds":0.0,"end_seconds":1.0,"confidence":0.8,"reason":"uzasadnienie"}]}',
+        "",
+        "KONTEKST PROCESU:",
+        f"Nazwa procesu: {process.name}",
+        f"Opis procesu: {process.description or 'brak'}",
+        "",
+        "OPERACJE I ICH CZYNNOŚCI (zamknięte listy):",
+    ]
+    for op_index, operation in enumerate(operations, start=1):
+        activities = list(operation.activities.all())
+        lines.append("")
+        lines.append(f"== Operacja {op_index}: {operation.name} ==")
+        lines.append(f"   Opis operacji: {operation.description or 'brak'}")
+        if len(activities) > 1:
+            sequence = " → ".join(activity.name for activity in activities)
+            lines.append(
+                f"   Typowa kolejność czynności (podpowiedź, nie sztywna reguła): {sequence}."
+            )
+            lines.append(
+                "   Dozwolone odstępstwa: powroty do wcześniejszych kroków, poprawki, powtórzenia, pominięcia."
+            )
+        lines.append("   Czynności:")
+        for act_index, activity in enumerate(activities, start=1):
+            lines.extend(_render_activity_block(act_index, activity))
+    lines.extend(
+        [
+            "",
+            "ZASADY SEGMENTACJI:",
+            "- start_seconds i end_seconds podawaj w sekundach od początku nagrania,",
+            "- confidence ma być liczbą od 0 do 1,",
+            "- reason ma krótko wyjaśniać, co widać lub słychać oraz po czym poznajesz operację,",
+            "- odpowiedź ma zawierać tylko JSON, bez komentarzy i markdown.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def build_analysis_prompt_for_video(video):
+    """Wybiera właściwy prompt: jedno-operacyjny lub multi-operacyjny."""
+    operations = video.analysis_operations()
+    if len(operations) > 1:
+        return build_multi_operation_prompt(video.analysis_process(), operations)
+    if operations:
+        return build_analysis_prompt(operations[0])
+    raise ValueError("Wideo nie ma przypisanej operacji do analizy.")
+
+
 def _extract_json(text):
     stripped = text.strip()
     if stripped.startswith("```"):
@@ -326,6 +455,104 @@ def _normalize_segments(payload, operation, duration_seconds=None):
     if not normalized:
         raise ValueError("Model nie zwrócił poprawnych segmentów.")
     return normalized
+
+
+def _multi_activity_lookup(operations):
+    by_op = {}
+    for operation in operations:
+        activities = list(operation.activities.all())
+        lookup = {activity.name.casefold(): activity for activity in activities}
+        uncertain = next((a for a in activities if "niepew" in a.name.casefold()), None)
+        by_op[operation.name.casefold()] = {
+            "operation": operation,
+            "lookup": lookup,
+            "uncertain": uncertain,
+        }
+    return by_op
+
+
+def _normalize_multi_segments(payload, operations, duration_seconds=None):
+    if not isinstance(payload, dict) or not isinstance(payload.get("segments"), list):
+        raise ValueError("JSON musi zawierać listę segments.")
+
+    by_op = _multi_activity_lookup(operations)
+    op_keys = list(by_op.keys())
+    normalized = []
+    last_end_by_op = defaultdict(lambda: Decimal("0"))
+    max_duration = quantize_seconds(duration_seconds) if duration_seconds else None
+
+    for item in payload["segments"]:
+        op_name = str(item.get("operation", "")).strip()
+        entry = by_op.get(op_name.casefold())
+        if entry is None and len(op_keys) == 1:
+            entry = by_op[op_keys[0]]
+        if entry is None:
+            continue
+        operation = entry["operation"]
+        activity_name = str(item.get("activity", "")).strip()
+        activity = entry["lookup"].get(activity_name.casefold())
+        if activity is None and entry["uncertain"] is not None:
+            activity = entry["uncertain"]
+            activity_name = entry["uncertain"].name
+        start = quantize_seconds(item.get("start_seconds", 0))
+        end = quantize_seconds(item.get("end_seconds", 0))
+        # Brak nakładania tylko w obrębie tej samej operacji; różne operacje równolegle.
+        if start < last_end_by_op[operation.pk]:
+            start = last_end_by_op[operation.pk]
+        if max_duration is not None:
+            start = min(start, max_duration)
+            end = min(end, max_duration)
+        if end <= start:
+            continue
+        confidence = float(item.get("confidence", 0))
+        normalized.append(
+            {
+                "operation": operation,
+                "operation_name": operation.name,
+                "activity": activity,
+                "activity_name": activity.name if activity else activity_name,
+                "start_seconds": start,
+                "end_seconds": end,
+                "confidence": max(0.0, min(1.0, confidence)),
+                "reason": str(item.get("reason", ""))[:2000],
+            }
+        )
+        last_end_by_op[operation.pk] = end
+
+    if not normalized:
+        raise ValueError("Model nie zwrócił poprawnych segmentów.")
+    return normalized
+
+
+def _mock_multi_segments(operations, duration_seconds):
+    total = quantize_seconds(duration_seconds or 60)
+    if total <= 0:
+        total = Decimal("60.00")
+    segments = []
+    for op_index, operation in enumerate(operations):
+        activities = list(operation.activities.all())
+        if not activities:
+            continue
+        count = min(len(activities), 3 if total < Decimal("12") else 4)
+        chosen = activities[:count]
+        seg_len = (total / Decimal(len(chosen))).quantize(Decimal("0.01"))
+        start = Decimal("0.00")
+        for index, activity in enumerate(chosen):
+            end = total if index == len(chosen) - 1 else start + seg_len
+            segments.append(
+                {
+                    "operation": operation.name,
+                    "activity": activity.name,
+                    "start_seconds": float(start),
+                    "end_seconds": float(end),
+                    "confidence": max(0.5, 0.88 - index * 0.05 - op_index * 0.03),
+                    "reason": f"Segment demo: operacja {operation.name}, czynność {activity.name}.",
+                }
+            )
+            start = end
+    if not segments:
+        raise ValueError("Wybrane operacje nie mają zdefiniowanych czynności.")
+    return {"segments": segments}
 
 
 def _gemini_client():
@@ -491,8 +718,12 @@ def _analyze_with_gemini(video, prompt):
 
     client = _gemini_client()
     if client is None:
-        raw = json.dumps(_mock_segments(video.operation, video.duration_seconds), ensure_ascii=False)
-        return raw, None
+        operations = video.analysis_operations()
+        if len(operations) > 1:
+            payload = _mock_multi_segments(operations, video.duration_seconds)
+        else:
+            payload = _mock_segments(operations[0], video.duration_seconds)
+        return json.dumps(payload, ensure_ascii=False), None
 
     uploaded = client.files.upload(file=video.anonymized_file.path)
     uploaded = _wait_for_uploaded_file(client, uploaded)
@@ -547,6 +778,8 @@ def persist_segments(analysis, segments):
                 analysis=analysis,
                 activity=segment["activity"],
                 activity_name=segment["activity_name"],
+                operation=segment.get("operation"),
+                operation_name=segment.get("operation_name", ""),
                 start_seconds=segment["start_seconds"],
                 end_seconds=segment["end_seconds"],
                 confidence=segment["confidence"],
@@ -557,9 +790,21 @@ def persist_segments(analysis, segments):
     )
 
 
+def _segments_from_payload(payload, operations, duration_seconds):
+    if len(operations) > 1:
+        return _normalize_multi_segments(payload, operations, duration_seconds)
+    segments = _normalize_segments(payload, operations[0], duration_seconds)
+    for segment in segments:
+        segment.setdefault("operation", operations[0])
+        segment.setdefault("operation_name", operations[0].name)
+    return segments
+
+
 def run_video_analysis(video):
-    operation = video.operation
-    prompt = build_analysis_prompt(operation)
+    operations = video.analysis_operations()
+    if not operations:
+        raise ValueError("Wideo nie ma przypisanej operacji do analizy.")
+    prompt = build_analysis_prompt_for_video(video)
     analysis = Analysis.objects.create(
         video=video,
         status=Analysis.Status.RUNNING,
@@ -574,12 +819,15 @@ def run_video_analysis(video):
         raw_response, usage = _analyze_with_gemini(video, prompt)
         try:
             payload = _extract_json(raw_response)
-            segments = _normalize_segments(payload, operation, video.duration_seconds)
+            segments = _segments_from_payload(payload, operations, video.duration_seconds)
         except Exception:
             if not settings.GEMINI_FALLBACK_TO_MOCK:
                 raise
-            payload = _mock_segments(operation, video.duration_seconds)
-            segments = _normalize_segments(payload, operation, video.duration_seconds)
+            if len(operations) > 1:
+                payload = _mock_multi_segments(operations, video.duration_seconds)
+            else:
+                payload = _mock_segments(operations[0], video.duration_seconds)
+            segments = _segments_from_payload(payload, operations, video.duration_seconds)
             raw_response = json.dumps(
                 {
                     "fallback_reason": "Nie udało się sparsować odpowiedzi Gemini, użyto segmentów demo.",
@@ -641,7 +889,7 @@ def analysis_summary(analysis):
     }
     total_duration = Decimal("0")
     max_segment_end = Decimal("0")
-    segments = list(analysis.segments.select_related("activity"))
+    segments = list(analysis.segments.select_related("activity", "operation"))
 
     for segment in segments:
         duration = segment.duration_seconds
@@ -665,16 +913,38 @@ def analysis_summary(analysis):
     video_duration = analysis.video.duration_seconds or total_duration or max_segment_end
     timeline_duration = max(video_duration, max_segment_end, Decimal("1"))
 
+    palette = ["#2563eb", "#059669", "#7c3aed", "#d97706", "#db2777", "#0891b2", "#65a30d", "#dc2626"]
+
+    def op_name_of(segment):
+        if segment.operation_name:
+            return segment.operation_name
+        if segment.operation_id:
+            return segment.operation.name
+        return ""
+
+    operation_colors = {}
+    for segment in segments:
+        oname = op_name_of(segment)
+        if oname and oname not in operation_colors:
+            operation_colors[oname] = palette[len(operation_colors) % len(palette)]
+    multi = len(operation_colors) > 1
+
+    gantt_by_key = {}
     for segment in segments:
         duration = segment.duration_seconds
-        if segment.activity_name not in gantt_by_activity:
-            gantt_by_activity[segment.activity_name] = {
+        oname = op_name_of(segment)
+        color = operation_colors.get(oname, "#1c2b4a") if multi else "#1c2b4a"
+        key = (oname, segment.activity_name)
+        if key not in gantt_by_key:
+            gantt_by_key[key] = {
                 "name": segment.activity_name,
+                "operation_name": oname,
+                "color": color,
                 "duration": Decimal("0"),
                 "first_start": segment.start_seconds,
                 "bars": [],
             }
-        row = gantt_by_activity[segment.activity_name]
+        row = gantt_by_key[key]
         row["duration"] += duration
         row["first_start"] = min(row["first_start"], segment.start_seconds)
         left = segment.start_seconds / timeline_duration * Decimal("100")
@@ -689,6 +959,7 @@ def analysis_summary(analysis):
                 "reason": segment.reason,
                 "left": _css_percent(left),
                 "width": _css_percent(width),
+                "color": color,
             }
         )
 
@@ -699,8 +970,11 @@ def analysis_summary(analysis):
         rows.append({"name": name, "duration": duration, "percent": percent})
 
     gantt_rows = sorted(
-        gantt_by_activity.values(),
-        key=lambda row: (row["first_start"], row["name"].casefold()),
+        gantt_by_key.values(),
+        key=lambda row: (row["operation_name"].casefold(), row["first_start"], row["name"].casefold()),
+    )
+    operations_legend = (
+        [{"name": n, "color": c} for n, c in operation_colors.items()] if multi else []
     )
 
     return {
@@ -709,6 +983,8 @@ def analysis_summary(analysis):
         "timeline_duration": timeline_duration,
         "activity_rows": rows,
         "gantt_rows": gantt_rows,
+        "operations_legend": operations_legend,
+        "is_multi_operation": multi,
         "operator": totals["operator"],
         "machine": totals["machine"],
         "walking": totals["walking"],

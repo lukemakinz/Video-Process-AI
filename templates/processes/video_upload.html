@@ -1,14 +1,15 @@
 {% extends "base.html" %}
+{% load i18n %}
 
-{% block title %}Prześlij nagranie{% endblock %}
+{% block title %}{% trans "Prześlij nagranie" %}{% endblock %}
 
 {% block content %}
 {% include "processes/_stepper.html" with current=1 %}
 
 <section class="mb-6">
-  <p class="eyebrow">Krok 1 z 3</p>
-  <h1>Prześlij nagranie</h1>
-  <p class="lead">Po uploadzie aplikacja utworzy wersję z anonimizacją twarzy. Analiza Gemini ruszy dopiero po podglądzie i zatwierdzeniu.</p>
+  <p class="eyebrow">{% trans "Krok 1 z 3" %}</p>
+  <h1>{% trans "Prześlij nagranie" %}</h1>
+  <p class="lead">{% trans "Po uploadzie aplikacja utworzy wersję z anonimizacją twarzy. Analiza Gemini ruszy dopiero po podglądzie i zatwierdzeniu." %}</p>
 </section>
 
 <form method="post" enctype="multipart/form-data" class="panel narrow max-w-2xl">
@@ -34,7 +35,7 @@
   {% endfor %}
 
   <div class="note">
-    Obsługiwane formaty: <strong>MP4, MOV</strong>. Plik oryginalny zostaje lokalnie, a do Gemini wysyłana jest tylko zatwierdzona wersja po anonimizacji.
+    {% trans "Obsługiwane formaty:" %} <strong>MP4, MOV</strong>. Plik oryginalny zostaje lokalnie, a do Gemini wysyłana jest tylko zatwierdzona wersja po anonimizacji.
   </div>
 
   <div class="flex items-center gap-2 pt-2">

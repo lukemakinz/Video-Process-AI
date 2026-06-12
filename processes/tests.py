@@ -531,6 +531,94 @@ class ProcessDemoTests(TestCase):
         self.machine.refresh_from_db()
         self.assertLess(self.load.order, self.machine.order)
 
+    # --- Import / klonowanie operacji ---
+
+    def test_clone_operation_duplicates_with_activities(self):
+        from processes.services import clone_operation
+        target = Process.objects.create(name="Nowy proces")
+        new_op = clone_operation(self.operation, target)
+        self.assertEqual(new_op.process, target)
+        self.assertEqual(new_op.activities.count(), self.operation.activities.count())
+        self.assertEqual(self.operation.process, self.process)
+        a = new_op.activities.first()
+        a.name = "ZMIENIONE"
+        a.save()
+        self.assertFalse(self.operation.activities.filter(name="ZMIENIONE").exists())
+
+    def test_clone_operation_dedupes_name(self):
+        from processes.services import clone_operation
+        new_op = clone_operation(self.operation, self.process)
+        self.assertEqual(new_op.name, "Frezowanie (2)")
+        new_op2 = clone_operation(self.operation, self.process)
+        self.assertEqual(new_op2.name, "Frezowanie (3)")
+
+    def test_operation_import_view_clones(self):
+        target = Process.objects.create(name="Docelowy")
+        r = self.client.post(
+            f"/processes/{target.pk}/operations/import/",
+            {"operations": [self.operation.pk]},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(target.operations.filter(name="Frezowanie").exists())
+        self.assertEqual(
+            target.operations.get(name="Frezowanie").activities.count(),
+            self.operation.activities.count(),
+        )
+
+    def test_process_video_upload_creates_video_with_operations(self):
+        op2 = Operation.objects.create(process=self.process, name="Malowanie", order=2)
+        Activity.objects.create(operation=op2, name="nakładanie farby", performed_by=Activity.Performer.OPERATOR)
+        upload = SimpleUploadedFile("clip.mp4", b"data", content_type="video/mp4")
+        with (
+            patch("processes.views.get_video_duration_seconds", side_effect=Exception("no ffprobe")),
+            patch("processes.views.anonymize_video"),
+        ):
+            r = self.client.post(
+                f"/processes/{self.process.pk}/analyze-video/",
+                {"operations": [self.operation.pk, op2.pk], "file": upload},
+            )
+        self.assertEqual(r.status_code, 302)
+        video = Video.objects.filter(original_filename="clip.mp4").first()
+        self.assertIsNotNone(video)
+        self.assertEqual(video.process, self.process)
+        self.assertEqual(
+            set(video.operations.values_list("pk", flat=True)),
+            {self.operation.pk, op2.pk},
+        )
+
+    @override_settings(GEMINI_USE_MOCK=True)
+    def test_run_multi_operation_analysis_assigns_operations(self):
+        from processes.services import run_video_analysis
+        op2 = Operation.objects.create(process=self.process, name="Malowanie", order=2)
+        Activity.objects.create(operation=op2, name="nakładanie farby", performed_by=Activity.Performer.OPERATOR)
+        video = Video.objects.create(
+            process=self.process, original_filename="m.mp4",
+            duration_seconds=Decimal("30.00"), approved_for_analysis_at=timezone.now(),
+            anonymized_file=SimpleUploadedFile("a.mp4", b"x"),
+        )
+        video.operations.set([self.operation, op2])
+        analysis = run_video_analysis(video)
+        self.assertEqual(analysis.status, Analysis.Status.COMPLETED)
+        op_names = set(analysis.segments.values_list("operation__name", flat=True))
+        self.assertIn("Frezowanie", op_names)
+        self.assertIn("Malowanie", op_names)
+        # segmenty różnych operacji mogą się nakładać w czasie (równoległe lane'y)
+        frez0 = analysis.segments.filter(operation=self.operation).order_by("start_seconds").first()
+        mal0 = analysis.segments.filter(operation=op2).order_by("start_seconds").first()
+        self.assertEqual(frez0.start_seconds, mal0.start_seconds)
+
+    def test_multi_operation_prompt_structure(self):
+        from processes.services import build_multi_operation_prompt
+        op2 = Operation.objects.create(process=self.process, name="Malowanie ścian", order=2)
+        Activity.objects.create(operation=op2, name="nakładanie farby", performed_by=Activity.Performer.OPERATOR)
+        prompt = build_multi_operation_prompt(self.process, [self.operation, op2])
+        self.assertIn("Frezowanie", prompt)
+        self.assertIn("Malowanie ścian", prompt)
+        self.assertIn('"operation"', prompt)
+        self.assertIn("Najpierw rozpoznaj OPERACJĘ", prompt)
+        self.assertIn("RÓWNOLEGLE", prompt)
+        self.assertIn("NIE jest 5", prompt)
+
     def test_prompt_includes_activity_order_hint(self):
         self.machine.order = 1; self.machine.save(update_fields=["order"])
         self.load.order = 2; self.load.save(update_fields=["order"])
@@ -558,13 +646,6 @@ class ProcessDemoTests(TestCase):
         )
         return analysis
 
-    def test_analysis_approve_all_marks_all_segments(self):
-        analysis = self._analysis_with_two_segments()
-        r = self.client.post(f"/analyses/{analysis.pk}/approve-all/")
-        self.assertEqual(r.status_code, 302)
-        self.assertEqual(analysis.segments.filter(is_approved=True).count(), 2)
-        self.assertFalse(analysis.segments.filter(is_approved=False).exists())
-
     def test_analysis_export_csv_contains_segments(self):
         analysis = self._analysis_with_two_segments()
         r = self.client.get(f"/analyses/{analysis.pk}/export.csv")
@@ -576,11 +657,11 @@ class ProcessDemoTests(TestCase):
         self.assertIn("0.00,4.00,4.00,załadunek detalu,0.91,nie,operator wkłada detal", body)
         self.assertIn("4.00,12.00,8.00,praca maszyny,0.82,nie,maszyna pracuje", body)
 
-    def test_analysis_detail_shows_export_and_approve_actions(self):
+    def test_analysis_detail_shows_approved_count(self):
         analysis = self._analysis_with_two_segments()
         r = self.client.get(f"/analyses/{analysis.pk}/")
         body = r.content.decode()
-        self.assertIn(f"/analyses/{analysis.pk}/export.csv", body)
-        self.assertIn(f"/analyses/{analysis.pk}/approve-all/", body)
+        # Eksport CSV jest zakomentowany, a "Zatwierdź całość" usunięty z UI.
+        self.assertNotIn(f"/analyses/{analysis.pk}/approve-all/", body)
         self.assertIn("Zatwierdzone", body)
         self.assertIn("0/2", body)

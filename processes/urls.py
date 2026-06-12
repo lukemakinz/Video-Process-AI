@@ -38,6 +38,16 @@ urlpatterns = [
         views.activity_move,
         name="activity_move",
     ),
+    path(
+        "processes/<int:process_id>/analyze-video/",
+        views.process_video_upload,
+        name="process_video_upload",
+    ),
+    path(
+        "processes/<int:process_id>/operations/import/",
+        views.operation_import,
+        name="operation_import",
+    ),
     path("videos/upload/", views.video_upload, name="video_upload"),
     path(
         "operations/<int:operation_id>/videos/upload/",
@@ -61,11 +71,6 @@ urlpatterns = [
         name="video_approve_and_analyze",
     ),
     path("analyses/<int:pk>/", views.analysis_detail, name="analysis_detail"),
-    path(
-        "analyses/<int:pk>/approve-all/",
-        views.analysis_approve_all,
-        name="analysis_approve_all",
-    ),
     path(
         "analyses/<int:pk>/export.csv",
         views.analysis_export_csv,
