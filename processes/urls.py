@@ -6,6 +6,7 @@ urlpatterns = [
     path("", views.process_list, name="process_list"),
     path("processes/new/", views.process_create, name="process_create"),
     path("processes/<int:pk>/", views.process_detail, name="process_detail"),
+    path("processes/<int:pk>/videos/", views.process_videos, name="process_videos"),
     path("processes/<int:pk>/edit/", views.process_edit, name="process_edit"),
     path("processes/<int:pk>/delete/", views.process_delete, name="process_delete"),
     path(
@@ -59,6 +60,11 @@ urlpatterns = [
         "videos/<int:pk>/reanonymize/",
         views.video_reanonymize,
         name="video_reanonymize",
+    ),
+    path(
+        "videos/<int:pk>/anonymization-status/",
+        views.anonymization_status,
+        name="anonymization_status",
     ),
     path(
         "videos/<int:pk>/analysis-status/",

@@ -1,4 +1,5 @@
 import tempfile
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -47,6 +48,18 @@ class ProcessDemoTests(TestCase):
         self.assertIn("praca maszyny", prompt)
         self.assertIn("Nie twórz nowych nazw czynności", prompt)
 
+    def test_prompt_anchors_duration_and_demands_decimal_seconds(self):
+        from processes.services import build_multi_operation_prompt
+        prompt = build_analysis_prompt(self.operation, duration_seconds=Decimal("90.47"))
+        self.assertIn("90.47", prompt)
+        self.assertIn("SEKUNDACH DZIESIĘTNYCH", prompt)
+        self.assertIn("nie w formacie zegarowym minuty:sekundy", prompt.replace("a NIE", "nie"))
+        multi = build_multi_operation_prompt(
+            self.process, [self.operation], duration_seconds=Decimal("90.47")
+        )
+        self.assertIn("90.47", multi)
+        self.assertIn("SEKUNDACH DZIESIĘTNYCH", multi)
+
     def test_upload_form_rejects_unsupported_format(self):
         upload = SimpleUploadedFile("film.avi", b"demo", content_type="video/avi")
         form = VideoUploadForm(data={"operation": self.operation.pk}, files={"file": upload})
@@ -63,44 +76,56 @@ class ProcessDemoTests(TestCase):
         video.file.save("input.mp4", SimpleUploadedFile("input.mp4", content), save=True)
         return video
 
-    def test_anonymize_video_copies_original_when_opencv_missing(self):
+    def test_anonymize_video_fails_when_opencv_missing(self):
         with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=Path(tmpdir)):
             video = self._video_with_file()
-            with (
-                patch("processes.services._opencv_face_blur", side_effect=ImportError),
-                patch("processes.services._full_frame_blur") as full_blur,
-            ):
-                anonymize_video(video)
+            with patch("processes.services._opencv_face_blur", side_effect=ImportError("No module named cv2")):
+                with self.assertRaises(ImportError):
+                    anonymize_video(video)
 
-            full_blur.assert_not_called()
             video.refresh_from_db()
-            self.assertEqual(video.status, Video.Status.AWAITING_APPROVAL)
-            self.assertIn("copy_without_full_blur_no_opencv", video.anonymization_error)
-            with video.anonymized_file.open("rb") as handle:
-                self.assertEqual(handle.read(), b"raw-video")
+            self.assertEqual(video.status, Video.Status.FAILED)
+            self.assertFalse(video.anonymized_file)
+            self.assertIn("No module named cv2", video.anonymization_error)
 
-    def test_anonymize_video_keeps_frame_when_no_faces_detected(self):
-        def no_faces(input_path, output_path):
-            Path(output_path).write_bytes(b"opencv-output")
-            return 0
+    def test_anonymize_video_fails_when_no_faces_detected(self):
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=Path(tmpdir)):
+            video = self._video_with_file()
+            video.approved_for_analysis_at = timezone.now()
+            video.save(update_fields=["approved_for_analysis_at"])
+            with patch(
+                "processes.services._opencv_face_blur",
+                side_effect=RuntimeError("Nie wykryto twarzy w filmie."),
+            ):
+                with self.assertRaises(RuntimeError):
+                    anonymize_video(video)
+
+            video.refresh_from_db()
+            self.assertEqual(video.status, Video.Status.FAILED)
+            self.assertFalse(video.anonymized_file)
+            self.assertIn("Nie wykryto twarzy", video.anonymization_error)
+
+    def test_anonymize_video_uses_face_detector_output_only(self):
+        def face_blur(input_path, output_path, progress_callback=None):
+            if progress_callback:
+                progress_callback(10, 10, "Wykrywanie i maskowanie twarzy", percent=90)
+            Path(output_path).write_bytes(b"face-mask-output")
+            return 4
 
         with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=Path(tmpdir)):
             video = self._video_with_file()
             video.approved_for_analysis_at = timezone.now()
             video.save(update_fields=["approved_for_analysis_at"])
-            with (
-                patch("processes.services._opencv_face_blur", side_effect=no_faces),
-                patch("processes.services._full_frame_blur") as full_blur,
-            ):
+            with patch("processes.services._opencv_face_blur", side_effect=face_blur) as face_blur_mock:
                 anonymize_video(video)
 
-            full_blur.assert_not_called()
+            face_blur_mock.assert_called_once()
             video.refresh_from_db()
             self.assertEqual(video.status, Video.Status.AWAITING_APPROVAL)
             self.assertIsNone(video.approved_for_analysis_at)
-            self.assertIn("opencv_face_blur_no_faces_detected", video.anonymization_error)
+            self.assertIn("yunet_face_blur (4", video.anonymization_error)
             with video.anonymized_file.open("rb") as handle:
-                self.assertEqual(handle.read(), b"opencv-output")
+                self.assertEqual(handle.read(), b"face-mask-output")
 
     def test_process_and_operation_forms_do_not_show_code_fields(self):
         self.assertNotIn("code", ProcessForm().fields)
@@ -141,6 +166,92 @@ class ProcessDemoTests(TestCase):
         self.assertEqual(summary["gantt_rows"][0]["bars"][0]["width"], "40.0000%")
         self.assertEqual(summary["gantt_rows"][1]["name"], "praca maszyny")
 
+    def test_gantt_merges_adjacent_same_activity_segments(self):
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("10.00"),
+        )
+        analysis = Analysis.objects.create(video=video, status=Analysis.Status.COMPLETED)
+        # AI zwróciło 3 stykające się segmenty tej samej czynności (0-3, 3-7, 7-10).
+        for start, end, conf in [("0", "3", 0.9), ("3", "7", 0.6), ("7", "10", 0.3)]:
+            AnalysisSegment.objects.create(
+                analysis=analysis,
+                activity=self.load,
+                activity_name=self.load.name,
+                start_seconds=Decimal(start),
+                end_seconds=Decimal(end),
+                confidence=conf,
+            )
+
+        summary = analysis_summary(analysis)
+
+        rows = summary["gantt_rows"]
+        self.assertEqual(len(rows), 1)
+        bars = rows[0]["bars"]
+        # Trzy przylegające segmenty mają się scalić w jeden blok 0-10 s.
+        self.assertEqual(len(bars), 1)
+        self.assertEqual(bars[0]["start_seconds"], Decimal("0"))
+        self.assertEqual(bars[0]["end_seconds"], Decimal("10"))
+        self.assertEqual(bars[0]["left"], "0.0000%")
+        self.assertEqual(bars[0]["width"], "100.0000%")
+
+    # --- Historia analiz wideo (paginacja) ---
+
+    def test_process_videos_lists_only_this_process(self):
+        Video.objects.create(
+            process=self.process,
+            operation=self.operation,
+            original_filename="mine.mp4",
+            duration_seconds=Decimal("10.00"),
+        )
+        other_process = Process.objects.create(name="Inny proces")
+        other_op = Operation.objects.create(process=other_process, name="Op X", order=1)
+        Video.objects.create(
+            process=other_process,
+            operation=other_op,
+            original_filename="foreign.mp4",
+            duration_seconds=Decimal("10.00"),
+        )
+        response = self.client.get(f"/processes/{self.process.pk}/videos/")
+        body = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("mine.mp4", body)
+        self.assertNotIn("foreign.mp4", body)
+
+    def test_process_videos_paginates_at_20(self):
+        for i in range(21):
+            Video.objects.create(
+                process=self.process,
+                operation=self.operation,
+                original_filename=f"v{i}.mp4",
+                duration_seconds=Decimal("5.00"),
+            )
+        page1 = self.client.get(f"/processes/{self.process.pk}/videos/")
+        self.assertEqual(len(page1.context["page_obj"].object_list), 20)
+        page2 = self.client.get(f"/processes/{self.process.pk}/videos/?page=2")
+        self.assertEqual(len(page2.context["page_obj"].object_list), 1)
+
+    def test_process_videos_row_links_depend_on_status(self):
+        done = Video.objects.create(
+            process=self.process,
+            operation=self.operation,
+            original_filename="done.mp4",
+            duration_seconds=Decimal("5.00"),
+            status=Video.Status.COMPLETED,
+        )
+        analysis = Analysis.objects.create(video=done, status=Analysis.Status.COMPLETED)
+        pending = Video.objects.create(
+            process=self.process,
+            operation=self.operation,
+            original_filename="pending.mp4",
+            duration_seconds=Decimal("5.00"),
+            status=Video.Status.AWAITING_APPROVAL,
+        )
+        body = self.client.get(f"/processes/{self.process.pk}/videos/").content.decode()
+        self.assertIn(f"/analyses/{analysis.pk}/", body)
+        self.assertIn(f"/videos/{pending.pk}/review/", body)
+
     # --- Etap 1: IA + analiza w tle ---
 
     def test_home_has_no_global_analyze_entry_and_loads_htmx(self):
@@ -149,9 +260,12 @@ class ProcessDemoTests(TestCase):
         self.assertNotIn('href="/videos/upload/"', body)
         self.assertIn("htmx.org", body)
 
-    def test_operation_detail_next_step_cta(self):
+    def test_operation_detail_has_no_operation_level_analyze_entry(self):
         with_act = self.client.get(f"/operations/{self.operation.pk}/")
-        self.assertIn("Wgraj nagranie do analizy", with_act.content.decode())
+        with_act_body = with_act.content.decode()
+        self.assertNotIn("Wgraj nagranie do analizy", with_act_body)
+        self.assertNotIn("Analizuj film", with_act_body)
+        self.assertNotIn(f"/operations/{self.operation.pk}/videos/upload/", with_act_body)
 
         empty_op = Operation.objects.create(
             process=self.process, name="Pakowanie", order=2
@@ -160,6 +274,17 @@ class ProcessDemoTests(TestCase):
         body = empty.content.decode()
         self.assertIn("Najpierw zdefiniuj czynności", body)
         self.assertNotIn("Wgraj nagranie do analizy", body)
+        self.assertNotIn(f"/operations/{empty_op.pk}/videos/upload/", body)
+
+    def test_process_detail_keeps_only_process_level_analyze_entry(self):
+        response = self.client.get(f"/processes/{self.process.pk}/")
+        body = response.content.decode()
+        self.assertIn(f"/processes/{self.process.pk}/analyze-video/", body)
+        self.assertNotIn(f"/operations/{self.operation.pk}/videos/upload/", body)
+
+    def test_operation_video_upload_redirects_to_process(self):
+        response = self.client.get(f"/operations/{self.operation.pk}/videos/upload/")
+        self.assertRedirects(response, f"/processes/{self.process.pk}/")
 
     @override_settings(GEMINI_USE_MOCK=True)
     def test_run_analysis_in_background_spawns_thread(self):
@@ -196,6 +321,18 @@ class ProcessDemoTests(TestCase):
         self.assertIn('hx-trigger="every 3s"', body)
         self.assertIn("Analiza w toku", body)
 
+    @override_settings(LANGUAGE_CODE="en")
+    def test_analysis_status_running_translates_heading(self):
+        video = self._make_video_with_analysis(Analysis.Status.RUNNING)
+        r = self.client.get(
+            f"/videos/{video.pk}/analysis-status/",
+            HTTP_ACCEPT_LANGUAGE="en",
+        )
+        body = r.content.decode()
+        self.assertIn("Analysis in progress", body)
+        self.assertIn("The result will appear here automatically", body)
+        self.assertNotIn("Analiza w toku", body)
+
     def test_analysis_status_completed_links_result_and_stops(self):
         video = self._make_video_with_analysis(Analysis.Status.COMPLETED)
         analysis = video.analyses.first()
@@ -227,7 +364,7 @@ class ProcessDemoTests(TestCase):
         self.assertIsNotNone(video.approved_for_analysis_at)
         self.assertRedirects(r, f"/videos/{video.pk}/review/")
 
-    def test_video_reanonymize_calls_service_and_allows_reapproval(self):
+    def test_video_reanonymize_starts_background_and_shows_polling(self):
         video = self._video_with_file()
         video.anonymized_file.save("old.mp4", SimpleUploadedFile("old.mp4", b"old"), save=False)
         video.status = Video.Status.COMPLETED
@@ -235,25 +372,87 @@ class ProcessDemoTests(TestCase):
         video.save(update_fields=["anonymized_file", "status", "approved_for_analysis_at"])
         Analysis.objects.create(video=video, status=Analysis.Status.COMPLETED)
 
-        def fake_anonymize(video_obj):
-            video_obj.status = Video.Status.AWAITING_APPROVAL
-            video_obj.approved_for_analysis_at = None
-            video_obj.save(update_fields=["status", "approved_for_analysis_at"])
-            return video_obj
-
-        with patch("processes.views.anonymize_video", side_effect=fake_anonymize) as anonymize:
+        with patch("processes.views.run_anonymization_in_background") as anonymize:
             response = self.client.post(f"/videos/{video.pk}/reanonymize/")
 
         anonymize.assert_called_once()
         self.assertRedirects(response, f"/videos/{video.pk}/review/")
+
+        video.status = Video.Status.ANONYMIZING
+        video.anonymization_error = ""
+        video.save(update_fields=["status", "anonymization_error"])
         video.refresh_from_db()
-        self.assertEqual(video.status, Video.Status.AWAITING_APPROVAL)
-        self.assertIsNone(video.approved_for_analysis_at)
 
         review = self.client.get(f"/videos/{video.pk}/review/")
         body = review.content.decode()
-        self.assertIn("Zatwierdź i rozpocznij analizę Gemini", body)
-        self.assertIn("Ponów anonimizację z oryginału", body)
+        self.assertIn("Anonimizacja w toku", body)
+        self.assertIn('hx-trigger="load, every 3s"', body)
+        self.assertIn("Uruchom ponownie z oryginału", body)
+        self.assertNotIn("Zatwierdź i rozpocznij analizę Gemini", body)
+
+    def test_video_reanonymize_get_redirects_to_review(self):
+        video = self._video_with_file()
+        response = self.client.get(f"/videos/{video.pk}/reanonymize/")
+        self.assertRedirects(response, f"/videos/{video.pk}/review/")
+
+    def test_anonymization_status_refreshes_review_after_completion(self):
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("12.00"),
+            status=Video.Status.AWAITING_APPROVAL,
+            anonymized_file=SimpleUploadedFile("a.mp4", b"x"),
+        )
+        response = self.client.get(f"/videos/{video.pk}/anonymization-status/")
+        self.assertEqual(response.headers["HX-Refresh"], "true")
+        self.assertIn("Anonimizacja zakończona", response.content.decode())
+
+    def test_anonymization_status_shows_progress(self):
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("12.00"),
+            status=Video.Status.ANONYMIZING,
+            anonymization_progress_percent=37,
+            anonymization_progress_current=370,
+            anonymization_progress_total=1000,
+            anonymization_progress_label="Wykrywanie i maskowanie twarzy",
+            anonymization_progress_updated_at=timezone.now(),
+        )
+        response = self.client.get(f"/videos/{video.pk}/anonymization-status/")
+        body = response.content.decode()
+        self.assertIn("37%", body)
+        self.assertIn("370/1000 klatek", body)
+        self.assertIn("Wykrywanie i maskowanie twarzy", body)
+        self.assertNotIn("HX-Refresh", response.headers)
+
+    def test_stale_anonymization_is_marked_failed(self):
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("12.00"),
+            status=Video.Status.ANONYMIZING,
+            anonymization_progress_percent=42,
+            anonymization_progress_updated_at=timezone.now() - timedelta(minutes=6),
+        )
+        response = self.client.get(f"/videos/{video.pk}/anonymization-status/")
+        video.refresh_from_db()
+        self.assertEqual(video.status, Video.Status.FAILED)
+        self.assertIn("przerwana", video.anonymization_error)
+        self.assertEqual(response.headers["HX-Refresh"], "true")
+
+    def test_video_review_does_not_show_awaiting_approval_badge(self):
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("12.00"),
+            status=Video.Status.AWAITING_APPROVAL,
+            anonymized_file=SimpleUploadedFile("a.mp4", b"x"),
+        )
+        response = self.client.get(f"/videos/{video.pk}/review/")
+        body = response.content.decode()
+        self.assertNotIn("Do zatwierdzenia", body)
+        self.assertIn("Analiza AI", body)
 
     # --- Etap 2: asystent AI (OpenAI) ---
 
@@ -492,10 +691,63 @@ class ProcessDemoTests(TestCase):
         )
         self.assertEqual(r.status_code, 200)
         hint = ActivityHint.objects.get(source_segment=seg)
-        self.assertEqual(hint.activity, self.load)
-        self.assertEqual(hint.confused_with, self.machine)
+        self.assertEqual(hint.activity, self.machine)
+        self.assertEqual(hint.confused_with, self.load)
         self.assertIn("pieprz jest ciemniejszy", hint.text)
         self.assertIn("uwzględni", r.content.decode())
+        prompt = build_analysis_prompt(self.operation)
+        self.assertIn("pieprz jest ciemniejszy", prompt)
+        self.assertIn("bywa mylone z: załadunek detalu", prompt)
+
+    def test_segment_feedback_for_process_video_is_used_in_future_prompts(self):
+        from processes.models import ActivityHint
+        from processes.services import build_multi_operation_prompt
+
+        video = Video.objects.create(
+            process=self.process,
+            original_filename="process.mp4",
+            duration_seconds=Decimal("20.00"),
+        )
+        video.operations.set([self.operation])
+        analysis = Analysis.objects.create(video=video, status=Analysis.Status.COMPLETED)
+        seg = AnalysisSegment.objects.create(
+            analysis=analysis,
+            activity=self.load,
+            activity_name=self.load.name,
+            start_seconds=Decimal("12"),
+            end_seconds=Decimal("20"),
+            confidence=0.4,
+        )
+
+        note = "At the end the driver stops the car and moves his hands away"
+        r = self.client.post(
+            f"/analyses/{analysis.pk}/segments/{seg.pk}/feedback/",
+            {"note": note, "confused_with": self.machine.pk},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        hint = ActivityHint.objects.get(source_segment=seg)
+        self.assertEqual(hint.activity, self.machine)
+        self.assertEqual(hint.confused_with, self.load)
+        prompt = build_multi_operation_prompt(self.process, [self.operation])
+        self.assertIn(note, prompt)
+        self.assertIn("bywa mylone z: załadunek detalu", prompt)
+
+    @override_settings(LANGUAGE_CODE="en")
+    def test_segment_feedback_controls_translate_to_english(self):
+        analysis, _seg = self._segment_for_feedback()
+        response = self.client.get(
+            f"/analyses/{analysis.pk}/",
+            HTTP_ACCEPT_LANGUAGE="en",
+        )
+        body = response.content.decode()
+        # Przyciski oceny to teraz ikony kciuka z etykietami dostępności (bez tekstu Good/Correct).
+        self.assertIn("Confirm segment", body)
+        self.assertIn("Edit segment", body)
+        self.assertIn("Save note for AI", body)
+        self.assertIn("e.g. pepper is darker than salt", body)
+        self.assertNotIn("Dobrze", body)
+        self.assertNotIn(">Popraw<", body)
 
     def test_hint_toggle_flips_active(self):
         from processes.models import ActivityHint
@@ -571,13 +823,14 @@ class ProcessDemoTests(TestCase):
         upload = SimpleUploadedFile("clip.mp4", b"data", content_type="video/mp4")
         with (
             patch("processes.views.get_video_duration_seconds", side_effect=Exception("no ffprobe")),
-            patch("processes.views.anonymize_video"),
+            patch("processes.views.run_anonymization_in_background") as anonymize,
         ):
             r = self.client.post(
                 f"/processes/{self.process.pk}/analyze-video/",
                 {"operations": [self.operation.pk, op2.pk], "file": upload},
             )
         self.assertEqual(r.status_code, 302)
+        anonymize.assert_called_once()
         video = Video.objects.filter(original_filename="clip.mp4").first()
         self.assertIsNotNone(video)
         self.assertEqual(video.process, self.process)

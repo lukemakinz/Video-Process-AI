@@ -126,6 +126,7 @@
                flex items-center px-2 overflow-hidden;
       }
       .gantt-bar span { @apply font-mono text-[10px] text-white truncate; }
+      .gantt-playhead { @apply absolute top-0 bottom-0 w-0.5 bg-red-500/80 pointer-events-none z-20; transition: left 0.15s linear; }
 
       /* --- Activity bars --- */
       .activity-bars { @apply space-y-3; }

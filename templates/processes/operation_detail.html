@@ -26,31 +26,16 @@
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
       {% trans "Dodaj czynność" %}
     </a>
-    <a class="btn primary" href="{% url 'operation_video_upload' operation.pk %}">
-      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/></svg>
-      {% trans "Analizuj film" %}
-    </a>
   </div>
 </section>
 
-{% if operation.activities.all %}
-  <div class="rounded-xl border border-primary-100 bg-primary-50 p-4 sm:p-5 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-    <div>
-      <p class="font-medium text-primary-800">{% trans "Operacja gotowa do analizy" %}</p>
-      <p class="text-sm text-primary-700/80">{% trans "Wgraj nagranie tej operacji — Gemini przypisze fragmenty do zdefiniowanych czynności." %}</p>
-    </div>
-    <a class="btn primary shrink-0" href="{% url 'operation_video_upload' operation.pk %}">
-      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
-      {% trans "Wgraj nagranie do analizy" %}
-    </a>
-  </div>
-{% else %}
+{% if not operation.activities.all %}
   <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <div>
       <p class="font-medium text-amber-800">{% trans "Najpierw zdefiniuj czynności" %}</p>
       <p class="text-sm text-amber-700/80">{% trans "Analiza wymaga zamkniętej listy czynności — to jedyne kategorie, które rozpozna model." %}</p>
     </div>
-    <a class="btn secondary shrink-0" href="{% url 'activity_create' operation.pk %}">{% trans "Dodaj czynność" %}</a>
+    <a class="btn ghost shrink-0" href="{% url 'activity_create' operation.pk %}">{% trans "Dodaj czynność" %}</a>
   </div>
 {% endif %}
 
@@ -107,7 +92,7 @@
   {% else %}
     <div class="empty-state compact">
       <p>{% trans "Dodaj zamkniętą listę czynności. Gemini będzie mogło wybierać tylko spośród nich." %}</p>
-      <a class="btn primary" href="{% url 'activity_create' operation.pk %}">{% trans "Dodaj czynność" %}</a>
+      <a class="btn ghost" href="{% url 'activity_create' operation.pk %}">{% trans "Dodaj czynność" %}</a>
     </div>
   {% endif %}
 </section>
@@ -115,7 +100,6 @@
 <section class="panel">
   <div class="panel-head">
     <h2>{% trans "Ostatnie nagrania" %}</h2>
-    <a class="btn ghost small" href="{% url 'operation_video_upload' operation.pk %}">{% trans "Wgraj nowe" %}</a>
   </div>
   {% if videos %}
     <div class="table-wrap">

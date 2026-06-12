@@ -1,6 +1,5 @@
 import json
 import re
-import shutil
 import subprocess
 import threading
 import time
@@ -14,8 +13,11 @@ from django.db import connection, transaction
 from django.db.models import Max
 from django.utils import timezone
 from django.utils.text import slugify
+from django.utils.translation import gettext_noop
 
 from .models import Activity, Analysis, AnalysisSegment, Operation, Video
+
+FACE_DETECTOR_MODEL = Path(__file__).resolve().parent / "assets" / "models" / "face_detection_yunet_2023mar.onnx"
 
 
 def quantize_seconds(value):
@@ -53,40 +55,13 @@ def _safe_output_path(video, prefix):
     return output_dir / f"{prefix}_{safe_stem}.mp4"
 
 
-def _full_frame_blur(input_path, output_path):
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(input_path),
-            "-vf",
-            "boxblur=18:2",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "28",
-            "-c:a",
-            "copy",
-            str(output_path),
-        ],
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-
-
-def _copy_video(input_path, output_path):
-    shutil.copyfile(input_path, output_path)
-
-
-def _opencv_face_blur(input_path, output_path):
+def _opencv_face_blur(input_path, output_path, progress_callback=None):
     import cv2
+    import numpy as np
 
-    cascade_path = Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
-    face_cascade = cv2.CascadeClassifier(str(cascade_path))
+    if not FACE_DETECTOR_MODEL.exists():
+        raise RuntimeError("Brakuje modelu detekcji twarzy YuNet.")
+
     capture = cv2.VideoCapture(str(input_path))
     if not capture.isOpened():
         raise RuntimeError("Nie można otworzyć pliku wideo do anonimizacji.")
@@ -94,37 +69,124 @@ def _opencv_face_blur(input_path, output_path):
     fps = capture.get(cv2.CAP_PROP_FPS) or 25
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    if progress_callback:
+        progress_callback(0, total_frames, gettext_noop("Wykrywanie i maskowanie twarzy"), percent=1, force=True)
+    max_detector_side = 960
+    detector_scale = min(1.0, max_detector_side / max(width, height))
+    detector_size = (
+        max(1, int(width * detector_scale)),
+        max(1, int(height * detector_scale)),
+    )
+    output_scale = min(1.0, 1280 / max(width, height))
+    output_size = (
+        max(1, int(width * output_scale)),
+        max(1, int(height * output_scale)),
+    )
+    detector = cv2.FaceDetectorYN_create(
+        str(FACE_DETECTOR_MODEL),
+        "",
+        detector_size,
+        0.75,
+        0.3,
+        5000,
+    )
     silent_path = output_path.with_name(f"{output_path.stem}_silent.mp4")
     writer = cv2.VideoWriter(
         str(silent_path),
         cv2.VideoWriter_fourcc(*"mp4v"),
         fps,
-        (width, height),
+        output_size,
     )
+    if not writer.isOpened():
+        capture.release()
+        raise RuntimeError("Nie można utworzyć pliku roboczego po anonimizacji.")
+
+    detection_interval = max(1, int(round(fps / 8)))
+    frame_index = 0
+    active_boxes = []
+    active_ttl = 0
     blurred_faces = 0
+    last_progress_at = 0.0
 
     while True:
         ok, frame = capture.read()
         if not ok:
             break
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-        for (x, y, w, h) in faces:
-            padding_x = int(w * 0.18)
-            padding_y = int(h * 0.22)
+
+        if frame_index % detection_interval == 0:
+            detector_frame = (
+                cv2.resize(frame, detector_size, interpolation=cv2.INTER_AREA)
+                if detector_scale < 1.0
+                else frame
+            )
+            _, faces = detector.detect(detector_frame)
+            active_boxes = []
+            if faces is not None:
+                for face in faces:
+                    x, y, w, h = (face[:4] / detector_scale).astype(int)
+                    if w * h >= 1800:
+                        active_boxes.append((x, y, w, h))
+            active_ttl = detection_interval if active_boxes else 0
+
+        for x, y, w, h in active_boxes:
+            padding_x = int(w * 0.10)
+            padding_y = int(h * 0.12)
             x1 = max(0, x - padding_x)
             y1 = max(0, y - padding_y)
             x2 = min(width, x + w + padding_x)
             y2 = min(height, y + h + padding_y)
             face_region = frame[y1:y2, x1:x2]
             if face_region.size:
-                blur = cv2.GaussianBlur(face_region, (99, 99), 30)
-                frame[y1:y2, x1:x2] = blur
+                kernel = max(31, ((min(face_region.shape[:2]) // 3) | 1))
+                blur = cv2.GaussianBlur(face_region, (kernel, kernel), 0)
+                mask = cv2.ellipse(
+                    np.zeros(face_region.shape[:2], dtype="uint8"),
+                    (face_region.shape[1] // 2, face_region.shape[0] // 2),
+                    (max(1, face_region.shape[1] // 2), max(1, face_region.shape[0] // 2)),
+                    0,
+                    0,
+                    360,
+                    255,
+                    -1,
+                )
+                feather = max(15, ((min(face_region.shape[:2]) // 9) | 1))
+                mask = cv2.GaussianBlur(mask, (feather, feather), 0).astype("float32") / 255.0
+                mask = mask[..., None]
+                frame[y1:y2, x1:x2] = (blur * mask + face_region * (1.0 - mask)).astype("uint8")
                 blurred_faces += 1
-        writer.write(frame)
+        output_frame = (
+            cv2.resize(frame, output_size, interpolation=cv2.INTER_AREA)
+            if output_scale < 1.0
+            else frame
+        )
+        writer.write(output_frame)
+        if active_ttl:
+            active_ttl -= 1
+            if not active_ttl:
+                active_boxes = []
+        frame_index += 1
+        if progress_callback and total_frames:
+            now = time.monotonic()
+            if now - last_progress_at >= 1.0 or frame_index >= total_frames:
+                percent = min(90, max(1, int(frame_index / total_frames * 90)))
+                progress_callback(
+                    frame_index,
+                    total_frames,
+                    gettext_noop("Wykrywanie i maskowanie twarzy"),
+                    percent=percent,
+                )
+                last_progress_at = now
 
     capture.release()
     writer.release()
+
+    if not blurred_faces:
+        silent_path.unlink(missing_ok=True)
+        raise RuntimeError("Nie wykryto twarzy w filmie. Anonimizacja nie została wykonana.")
+
+    if progress_callback:
+        progress_callback(total_frames, total_frames, gettext_noop("Łączenie audio i zapis pliku"), percent=95, force=True)
 
     subprocess.run(
         [
@@ -141,9 +203,11 @@ def _opencv_face_blur(input_path, output_path):
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            "ultrafast",
             "-crf",
-            "23",
+            "28",
+            "-threads",
+            "0",
             "-c:a",
             "aac",
             "-shortest",
@@ -158,33 +222,62 @@ def _opencv_face_blur(input_path, output_path):
 
 
 def anonymize_video(video):
+    def update_progress(current, total, label, percent=None, force=False):
+        if percent is None:
+            percent = int(current / total * 100) if total else 0
+        percent = max(0, min(100, int(percent)))
+        Video.objects.filter(pk=video.pk).update(
+            anonymization_progress_current=max(0, int(current or 0)),
+            anonymization_progress_total=max(0, int(total or 0)),
+            anonymization_progress_percent=percent,
+            anonymization_progress_label=label,
+            anonymization_progress_updated_at=timezone.now(),
+        )
+        video.anonymization_progress_current = max(0, int(current or 0))
+        video.anonymization_progress_total = max(0, int(total or 0))
+        video.anonymization_progress_percent = percent
+        video.anonymization_progress_label = label
+        video.anonymization_progress_updated_at = timezone.now()
+
     video.status = Video.Status.ANONYMIZING
     video.anonymization_error = ""
-    video.save(update_fields=["status", "anonymization_error"])
+    video.anonymized_file = ""
+    video.anonymization_progress_current = 0
+    video.anonymization_progress_total = 0
+    video.anonymization_progress_percent = 0
+    video.anonymization_progress_label = gettext_noop("Przygotowanie pliku")
+    video.anonymization_progress_updated_at = timezone.now()
+    video.save(
+        update_fields=[
+            "status",
+            "anonymization_error",
+            "anonymized_file",
+            "anonymization_progress_current",
+            "anonymization_progress_total",
+            "anonymization_progress_percent",
+            "anonymization_progress_label",
+            "anonymization_progress_updated_at",
+        ]
+    )
 
     input_path = Path(video.file.path)
     output_path = _safe_output_path(video, "anon")
 
     try:
-        try:
-            blurred_faces = _opencv_face_blur(input_path, output_path)
-            if blurred_faces:
-                mode = f"opencv_face_blur ({blurred_faces} wykryć twarzy)"
-            else:
-                mode = "opencv_face_blur_no_faces_detected"
-        except ImportError:
-            _copy_video(input_path, output_path)
-            mode = "copy_without_full_blur_no_opencv"
-        except Exception as exc:
-            if output_path.exists():
-                output_path.unlink()
-            _copy_video(input_path, output_path)
-            mode = f"copy_without_full_blur_fallback ({exc})"
+        blurred_faces = _opencv_face_blur(input_path, output_path, progress_callback=update_progress)
+        mode = f"yunet_face_blur ({blurred_faces} zamaskowanych wystąpień twarzy)"
 
         with output_path.open("rb") as handle:
             video.anonymized_file.save(output_path.name, File(handle), save=False)
         output_path.unlink(missing_ok=True)
 
+        update_progress(
+            video.anonymization_progress_total,
+            video.anonymization_progress_total,
+            "Anonimizacja zakończona",
+            percent=100,
+            force=True,
+        )
         video.status = Video.Status.AWAITING_APPROVAL
         video.anonymized_at = timezone.now()
         video.approved_for_analysis_at = None
@@ -196,14 +289,64 @@ def anonymize_video(video):
                 "anonymized_at",
                 "approved_for_analysis_at",
                 "anonymization_error",
+                "anonymization_progress_current",
+                "anonymization_progress_total",
+                "anonymization_progress_percent",
+                "anonymization_progress_label",
+                "anonymization_progress_updated_at",
             ]
         )
         return video
     except Exception as exc:
+        output_path.unlink(missing_ok=True)
+        output_path.with_name(f"{output_path.stem}_silent.mp4").unlink(missing_ok=True)
         video.status = Video.Status.FAILED
         video.anonymization_error = str(exc)
-        video.save(update_fields=["status", "anonymization_error"])
+        video.anonymization_progress_label = gettext_noop("Błąd anonimizacji")
+        video.anonymization_progress_updated_at = timezone.now()
+        video.save(
+            update_fields=[
+                "status",
+                "anonymization_error",
+                "anonymization_progress_label",
+                "anonymization_progress_updated_at",
+            ]
+        )
         raise
+
+
+def _anonymization_worker(video_pk):
+    try:
+        video = Video.objects.get(pk=video_pk)
+        anonymize_video(video)
+    finally:
+        connection.close()
+
+
+def run_anonymization_in_background(video):
+    video.status = Video.Status.ANONYMIZING
+    video.anonymization_error = ""
+    video.approved_for_analysis_at = None
+    video.anonymization_progress_current = 0
+    video.anonymization_progress_total = 0
+    video.anonymization_progress_percent = 0
+    video.anonymization_progress_label = gettext_noop("W kolejce do anonimizacji")
+    video.anonymization_progress_updated_at = timezone.now()
+    video.save(
+        update_fields=[
+            "status",
+            "anonymization_error",
+            "approved_for_analysis_at",
+            "anonymization_progress_current",
+            "anonymization_progress_total",
+            "anonymization_progress_percent",
+            "anonymization_progress_label",
+            "anonymization_progress_updated_at",
+        ]
+    )
+    thread = threading.Thread(target=_anonymization_worker, args=(video.pk,), daemon=True)
+    thread.start()
+    return thread
 
 
 def _dedupe_operation_name(process, base_name):
@@ -242,7 +385,24 @@ def clone_operation(source, target_process):
     return new_operation
 
 
-def build_analysis_prompt(operation):
+def _duration_rule_lines(duration_seconds):
+    """Reguły skali czasu: kotwiczą długość nagrania i wymuszają sekundy dziesiętne
+    (model bywa, że zwraca czas zegarowo mm:ss, np. 1.30 zamiast 90.0)."""
+    lines = []
+    if duration_seconds:
+        total = quantize_seconds(duration_seconds)
+        lines.append(
+            f"- nagranie trwa {total} sekund — segmenty muszą pokrywać całą jego długość,"
+            f" a end_seconds nie może przekraczać {total},"
+        )
+    lines.append(
+        "- czas podawaj w SEKUNDACH DZIESIĘTNYCH liczonych od początku (np. 75.5),"
+        " a NIE w formacie zegarowym minuty:sekundy (90 sekund to 90.0, nie 1.30),"
+    )
+    return lines
+
+
+def build_analysis_prompt(operation, duration_seconds=None):
     activities = list(operation.activities.all())
     lines = [
         f'Analizujesz zanonimizowane nagranie operacji "{operation.name}" w procesie "{operation.process.name}".',
@@ -296,7 +456,7 @@ def build_analysis_prompt(operation):
         [
             "Zasady segmentacji:",
             "- segmenty nie mogą nachodzić na siebie,",
-            "- start_seconds i end_seconds podawaj w sekundach od początku nagrania,",
+            *_duration_rule_lines(duration_seconds),
             "- confidence ma być liczbą od 0 do 1,",
             "- reason ma krótko wyjaśniać, co widać lub słychać,",
             "- odpowiedź ma zawierać tylko JSON, bez komentarzy i markdown.",
@@ -328,7 +488,7 @@ def _render_activity_block(index, activity):
     return block
 
 
-def build_multi_operation_prompt(process, operations):
+def build_multi_operation_prompt(process, operations, duration_seconds=None):
     """Prompt do analizy nagrania procesu, na którym może równolegle występować
     wiele operacji (różni pracownicy / różne stanowiska)."""
     lines = [
@@ -378,7 +538,7 @@ def build_multi_operation_prompt(process, operations):
         [
             "",
             "ZASADY SEGMENTACJI:",
-            "- start_seconds i end_seconds podawaj w sekundach od początku nagrania,",
+            *_duration_rule_lines(duration_seconds),
             "- confidence ma być liczbą od 0 do 1,",
             "- reason ma krótko wyjaśniać, co widać lub słychać oraz po czym poznajesz operację,",
             "- odpowiedź ma zawierać tylko JSON, bez komentarzy i markdown.",
@@ -391,9 +551,11 @@ def build_analysis_prompt_for_video(video):
     """Wybiera właściwy prompt: jedno-operacyjny lub multi-operacyjny."""
     operations = video.analysis_operations()
     if len(operations) > 1:
-        return build_multi_operation_prompt(video.analysis_process(), operations)
+        return build_multi_operation_prompt(
+            video.analysis_process(), operations, duration_seconds=video.duration_seconds
+        )
     if operations:
-        return build_analysis_prompt(operations[0])
+        return build_analysis_prompt(operations[0], duration_seconds=video.duration_seconds)
     raise ValueError("Wideo nie ma przypisanej operacji do analizy.")
 
 
@@ -616,9 +778,25 @@ def assist_activity(operation, fields, mode="generate", target=None):
         else '{"description":"...","recognition_rules":"- ...","exclusion_rules":"- ...","possible_confusions":"- ..."}'
     )
     prompt = f"""
-Jesteś asystentem inżyniera procesu. {intent}
-Opis służy do analizy wideo produkcji gniazdowej. Pisz precyzyjnie i konkretnie.
+Jesteś światowej klasy prompt engineerem specjalizującym się w analizie wideo przez multimodalne modele AI.
+{intent}
 
+KONTEKST: opis, który tworzysz, trafia WPROST do promptu, którym inny model klasyfikuje fragmenty nagrania wideo z produkcji gniazdowej. Od jego jakości zależy, czy model poprawnie rozpozna tę czynność. Musi być na tyle precyzyjny i jednoznaczny, żeby model łatwo i pewnie odróżnił tę czynność od innych na filmie.
+
+ZASADY PISANIA (krytyczne):
+- Opisuj WYŁĄCZNIE to, co realnie widać w kadrze: pozycje i ruch rąk, narzędzia, maszyny, detale, ułożenie ciała, elementy w tle. Pisz tak, by dało się to potwierdzić na pojedynczej klatce.
+- ZAKAZane są meta-opisy w stylu „analiza wideo dotycząca sytuacji, w której…". Zamiast tego od razu opisz obserwowalny obraz.
+- Podawaj konkretne, ROZRÓŻNIAJĄCE cechy — najlepiej jedną dominującą, łatwą do sprawdzenia (np. „górna szprycha kierownicy pionowo do góry, szprychy symetryczne").
+- Jeśli czynność wykonuje maszyna, dodaj widoczny sygnał pracy (lampka, ruch wrzeciona/taśmy, wiór, wyświetlacz).
+- Dodawaj próg tolerancji, by drobne warianty nie wpadały w sąsiednią czynność.
+- Zwięźle, rzeczowo, po polsku.
+
+ZNACZENIE PÓL:
+- description (Opis tego, co powinno być widoczne): co dokładnie widać w kadrze podczas tej czynności.
+- recognition_rules (Warunki rozpoznania): lista obserwowalnych sygnałów, po których model ma ją rozpoznać.
+- exclusion_rules (Warunki wykluczenia): kiedy NIE przypisywać tej czynności — najlepiej wskazując konkurencyjną czynność, z którą bywa mylona.
+
+DANE WEJŚCIOWE:
 Proces: {operation.process.name}
 Operacja: {operation.name}
 Nazwa czynności: {fields.get('name') or 'do uzupełnienia'}
@@ -947,8 +1125,6 @@ def analysis_summary(analysis):
         row = gantt_by_key[key]
         row["duration"] += duration
         row["first_start"] = min(row["first_start"], segment.start_seconds)
-        left = segment.start_seconds / timeline_duration * Decimal("100")
-        width = duration / timeline_duration * Decimal("100")
         row["bars"].append(
             {
                 "id": segment.pk,
@@ -957,11 +1133,37 @@ def analysis_summary(analysis):
                 "duration": duration,
                 "confidence": segment.confidence,
                 "reason": segment.reason,
-                "left": _css_percent(left),
-                "width": _css_percent(width),
                 "color": color,
             }
         )
+
+    # Sklej przylegające/nakładające się słupki tej samej czynności w jeden blok
+    # (AI bywa, że dzieli ciągłą czynność na kilka segmentów pod rząd).
+    for row in gantt_by_key.values():
+        ordered = sorted(row["bars"], key=lambda b: b["start_seconds"])
+        merged = []
+        for bar in ordered:
+            if merged and bar["start_seconds"] <= merged[-1]["end_seconds"]:
+                prev = merged[-1]
+                prev_dur = prev["end_seconds"] - prev["start_seconds"]
+                bar_dur = bar["end_seconds"] - bar["start_seconds"]
+                prev["end_seconds"] = max(prev["end_seconds"], bar["end_seconds"])
+                total = (prev["end_seconds"] - prev["start_seconds"]) or Decimal("1")
+                # pewność jako średnia ważona czasem trwania scalanych segmentów
+                prev["confidence"] = round(
+                    (prev["confidence"] * float(prev_dur) + bar["confidence"] * float(bar_dur))
+                    / float(prev_dur + bar_dur or 1),
+                    4,
+                )
+                prev["duration"] = prev["end_seconds"] - prev["start_seconds"]
+            else:
+                merged.append(dict(bar))
+        for bar in merged:
+            left = bar["start_seconds"] / timeline_duration * Decimal("100")
+            width = bar["duration"] / timeline_duration * Decimal("100")
+            bar["left"] = _css_percent(left)
+            bar["width"] = _css_percent(width)
+        row["bars"] = merged
 
     for name, duration in sorted(totals_by_activity.items(), key=lambda item: item[0].casefold()):
         percent = Decimal("0")

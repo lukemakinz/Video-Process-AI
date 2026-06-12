@@ -33,4 +33,4 @@ UI korzysta z Tailwind CSS (Play CDN) oraz fontów Fira Sans / Fira Code. Brak k
 
 Po uploadzie aplikacja tworzy plik po anonimizacji i pokazuje go użytkownikowi do zatwierdzenia. Analiza AI jest blokowana, dopóki `anonymized_file` nie istnieje i użytkownik nie kliknie zatwierdzenia.
 
-Jeśli dostępne jest `opencv-python`, aplikacja próbuje rozmywać wykryte twarze. Bez OpenCV używa bezpiecznego fallbacku FFmpeg: pełne rozmycie obrazu. Oryginalny plik nie jest wysyłany do Gemini.
+Aplikacja używa OpenCV/YuNet do wykrywania twarzy i nakłada maskę tylko na wykryty obszar twarzy w klatkach, w których twarz jest widoczna. Brak OpenCV, błąd detekcji albo brak wykrytej twarzy zatrzymuje anonimizację z błędem — aplikacja nie zamazuje całego filmu jako fallbacku. Oryginalny plik nie jest wysyłany do Gemini.

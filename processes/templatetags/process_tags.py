@@ -1,8 +1,17 @@
 from decimal import Decimal
 
 from django import template
+from django.utils.translation import gettext
 
 register = template.Library()
+
+
+@register.filter
+def translate(value):
+    """Tłumaczy dynamiczny ciąg (np. etykietę postępu zapisaną w bazie) na aktywny język."""
+    if not value:
+        return value
+    return gettext(str(value))
 
 
 def _decimal(value):

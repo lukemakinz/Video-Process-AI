@@ -1,9 +1,11 @@
 import csv
+from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
 from django.contrib import messages
-from django.db.models import Count, Max
+from django.core.paginator import Paginator
+from django.db.models import Count, Max, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -17,15 +19,14 @@ from .forms import (
     ProcessForm,
     ProcessVideoUploadForm,
     SegmentCorrectionForm,
-    VideoUploadForm,
 )
 from .models import Activity, Analysis, Operation, Process, Video
 from .services import (
     analysis_summary,
-    anonymize_video,
     assist_activity,
     clone_operation,
     get_video_duration_seconds,
+    run_anonymization_in_background,
     run_analysis_in_background,
     segments_needing_review,
 )
@@ -56,6 +57,42 @@ def process_create(request):
 def process_detail(request, pk):
     process = get_object_or_404(Process.objects.prefetch_related("operations"), pk=pk)
     return render(request, "processes/process_detail.html", {"process": process})
+
+
+def process_videos(request, pk):
+    """Historia przeanalizowanych nagrań procesu — jeden wiersz na wideo,
+    najnowszy status, z paginacją."""
+    process = get_object_or_404(Process, pk=pk)
+    videos = (
+        Video.objects.filter(
+            Q(process=process)
+            | Q(operations__process=process)
+            | Q(operation__process=process)
+        )
+        .distinct()
+        .order_by("-created_at")
+    )
+    page_obj = Paginator(videos, 20).get_page(request.GET.get("page"))
+    for video in page_obj:
+        if video.status == Video.Status.COMPLETED:
+            analysis = (
+                video.analyses.filter(status=Analysis.Status.COMPLETED)
+                .order_by("-id")
+                .first()
+                or video.analyses.order_by("-id").first()
+            )
+            video.target_url = (
+                reverse("analysis_detail", kwargs={"pk": analysis.pk})
+                if analysis
+                else reverse("video_review", kwargs={"pk": video.pk})
+            )
+        else:
+            video.target_url = reverse("video_review", kwargs={"pk": video.pk})
+    return render(
+        request,
+        "processes/process_videos.html",
+        {"process": process, "page_obj": page_obj},
+    )
 
 
 def process_edit(request, pk):
@@ -349,37 +386,12 @@ def hint_delete(request, pk):
 
 
 def video_upload(request, operation_id=None):
-    operation = None
     if operation_id:
         operation = get_object_or_404(Operation.objects.select_related("process"), pk=operation_id)
-
-    form = VideoUploadForm(request.POST or None, request.FILES or None, operation=operation)
-    if request.method == "POST" and form.is_valid():
-        video = form.save(commit=False)
-        uploaded_file = form.cleaned_data["file"]
-        video.original_filename = uploaded_file.name
-        video.status = Video.Status.UPLOADED
-        video.save()
-        try:
-            video.duration_seconds = get_video_duration_seconds(video.file.path)
-            video.save(update_fields=["duration_seconds"])
-        except Exception as exc:
-            messages.warning(request, _("Nie udało się odczytać czasu trwania przez FFmpeg: %(error)s") % {"error": exc})
-        try:
-            anonymize_video(video)
-            messages.success(
-                request,
-                "Film został zanonimizowany. Sprawdź podgląd i zatwierdź analizę.",
-            )
-        except Exception as exc:
-            messages.error(request, _("Anonimizacja nie powiodła się: %(error)s") % {"error": exc})
-        return redirect("video_review", pk=video.pk)
-
-    return render(
-        request,
-        "processes/video_upload.html",
-        {"form": form, "operation": operation},
-    )
+        messages.info(request, _("Analizę filmu uruchom z poziomu procesu."))
+        return redirect(operation.process)
+    messages.info(request, _("Wybierz proces, dla którego chcesz przeanalizować film."))
+    return redirect("process_list")
 
 
 def process_video_upload(request, process_id):
@@ -400,14 +412,11 @@ def process_video_upload(request, process_id):
             video.save(update_fields=["duration_seconds"])
         except Exception as exc:
             messages.warning(request, _("Nie udało się odczytać czasu trwania przez FFmpeg: %(error)s") % {"error": exc})
-        try:
-            anonymize_video(video)
-            messages.success(
-                request,
-                "Film został zanonimizowany. Sprawdź podgląd i zatwierdź analizę.",
-            )
-        except Exception as exc:
-            messages.error(request, _("Anonimizacja nie powiodła się: %(error)s") % {"error": exc})
+        run_anonymization_in_background(video)
+        messages.info(
+            request,
+            _("Film został wgrany. Anonimizacja twarzy działa w tle, a status odświeży się automatycznie."),
+        )
         return redirect("video_review", pk=video.pk)
 
     return render(
@@ -422,6 +431,7 @@ def video_review(request, pk):
         Video.objects.select_related("operation", "operation__process"),
         pk=pk,
     )
+    _mark_stale_anonymization(video)
     latest_analysis = video.analyses.order_by("-id").first()
     return render(
         request,
@@ -430,12 +440,14 @@ def video_review(request, pk):
     )
 
 
-@require_POST
 def video_reanonymize(request, pk):
     video = get_object_or_404(
         Video.objects.select_related("operation", "operation__process"),
         pk=pk,
     )
+    if request.method != "POST":
+        messages.info(request, _("Ponowną anonimizację uruchom przyciskiem na stronie podglądu."))
+        return redirect("video_review", pk=video.pk)
     if video.status == Video.Status.ANALYZING:
         messages.error(request, _("Nie można ponowić anonimizacji w trakcie analizy."))
         return redirect("video_review", pk=video.pk)
@@ -443,12 +455,37 @@ def video_reanonymize(request, pk):
         messages.error(request, _("Brakuje oryginalnego pliku wideo."))
         return redirect("video_review", pk=video.pk)
 
-    try:
-        anonymize_video(video)
-        messages.success(request, _("Anonimizacja została ponowiona z oryginalnego pliku."))
-    except Exception as exc:
-        messages.error(request, _("Ponowna anonimizacja nie powiodła się: %(error)s") % {"error": exc})
+    run_anonymization_in_background(video)
+    messages.info(request, _("Ponowna anonimizacja została uruchomiona. Status odświeży się automatycznie."))
     return redirect("video_review", pk=video.pk)
+
+
+def anonymization_status(request, pk):
+    video = get_object_or_404(Video, pk=pk)
+    _mark_stale_anonymization(video)
+    response = render(request, "processes/_anonymization_status.html", {"video": video})
+    if video.status != Video.Status.ANONYMIZING:
+        response["HX-Refresh"] = "true"
+    return response
+
+
+def _mark_stale_anonymization(video):
+    if video.status != Video.Status.ANONYMIZING:
+        return
+    last_seen = video.anonymization_progress_updated_at or video.created_at
+    if last_seen and timezone.now() - last_seen > timedelta(minutes=5):
+        video.status = Video.Status.FAILED
+        video.anonymization_error = _(
+            "Anonimizacja została przerwana albo worker nie aktualizuje postępu od ponad 5 minut. Uruchom ponownie z oryginału."
+        )
+        video.anonymization_progress_label = _("Przerwano anonimizację")
+        video.save(
+            update_fields=[
+                "status",
+                "anonymization_error",
+                "anonymization_progress_label",
+            ]
+        )
 
 
 def analysis_status(request, pk):
@@ -494,10 +531,25 @@ def analysis_detail(request, pk):
     )
     operations = analysis.video.analysis_operations()
     operation = operations[0] if operations else None
-    segment_forms = [
-        (segment, SegmentCorrectionForm(instance=segment, operation=segment.operation or operation))
-        for segment in analysis.segments.select_related("activity", "operation")
-    ]
+    segments = list(
+        analysis.segments.select_related("activity", "activity__operation", "operation")
+    )
+    segment_forms = []
+    for segment in segments:
+        segment.resolved_operation = (
+            segment.operation
+            or (segment.activity.operation if segment.activity_id else None)
+            or operation
+        )
+        segment_forms.append(
+            (
+                segment,
+                SegmentCorrectionForm(
+                    instance=segment,
+                    operation=segment.resolved_operation,
+                ),
+            )
+        )
     cost = None
     if analysis.estimated_cost is not None:
         rate = Decimal(str(settings.GEMINI_USD_PLN_RATE))
@@ -594,13 +646,19 @@ def segment_approve(request, analysis_pk, segment_pk):
     analysis = get_object_or_404(
         Analysis.objects.select_related("video", "video__operation"), pk=analysis_pk
     )
-    segment = get_object_or_404(analysis.segments, pk=segment_pk)
+    segment = get_object_or_404(
+        analysis.segments.select_related("operation", "activity"),
+        pk=segment_pk,
+    )
     segment.is_approved = True
     segment.save(update_fields=["is_approved", "updated_at"])
+    operation = segment.operation or (
+        segment.activity.operation if segment.activity_id else analysis.video.operation
+    )
     return render(
         request,
         "processes/_segment_feedback.html",
-        {"analysis": analysis, "segment": segment, "operation": analysis.video.operation},
+        {"analysis": analysis, "segment": segment, "operation": operation},
     )
 
 
@@ -611,20 +669,33 @@ def segment_feedback(request, analysis_pk, segment_pk):
     analysis = get_object_or_404(
         Analysis.objects.select_related("video", "video__operation"), pk=analysis_pk
     )
-    segment = get_object_or_404(analysis.segments, pk=segment_pk)
-    operation = analysis.video.operation
+    segment = get_object_or_404(
+        analysis.segments.select_related("operation", "activity", "activity__operation"),
+        pk=segment_pk,
+    )
+    operations = analysis.video.analysis_operations()
+    operation = segment.operation or (segment.activity.operation if segment.activity_id else None)
     note = (request.POST.get("note") or "").strip()
-    confused_with = None
+    selected_activity = None
     confused_id = request.POST.get("confused_with")
-    if confused_id:
-        confused_with = operation.activities.filter(pk=confused_id).first()
-    target_activity = segment.activity or confused_with
+    if confused_id and operation is not None:
+        selected_activity = operation.activities.filter(pk=confused_id).first()
+    target_activity = selected_activity or segment.activity
+    if target_activity is None and operation is not None:
+        target_activity = operation.activities.first()
+    if target_activity is not None and operation is None:
+        operation = target_activity.operation
+    if operation is None and operations:
+        operation = operations[0]
+    confused_with = None
+    if selected_activity is not None and segment.activity_id and segment.activity_id != selected_activity.pk:
+        confused_with = segment.activity
     hint_saved = False
     if note and target_activity is not None:
         ActivityHint.objects.create(
             activity=target_activity,
             text=note,
-            confused_with=confused_with if confused_with != target_activity else None,
+            confused_with=confused_with,
             source_segment=segment,
         )
         hint_saved = True

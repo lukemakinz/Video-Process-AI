@@ -1,0 +1,19 @@
+{% load i18n %}
+{% comment %}Paginacja. Parametr: page_obj (django Page). Zachowuje tylko parametr ?page.{% endcomment %}
+{% if page_obj.paginator.num_pages > 1 %}
+  <nav class="flex items-center justify-between gap-2 mt-4" aria-label="{% trans 'Paginacja' %}">
+    {% if page_obj.has_previous %}
+      <a class="btn ghost small" href="?page={{ page_obj.previous_page_number }}">‹ {% trans "Poprzednia" %}</a>
+    {% else %}
+      <span class="btn ghost small opacity-40 pointer-events-none">‹ {% trans "Poprzednia" %}</span>
+    {% endif %}
+    <span class="text-sm text-slate-500 font-mono">
+      {% blocktrans with current=page_obj.number total=page_obj.paginator.num_pages %}Strona {{ current }} z {{ total }}{% endblocktrans %}
+    </span>
+    {% if page_obj.has_next %}
+      <a class="btn ghost small" href="?page={{ page_obj.next_page_number }}">{% trans "Następna" %} ›</a>
+    {% else %}
+      <span class="btn ghost small opacity-40 pointer-events-none">{% trans "Następna" %} ›</span>
+    {% endif %}
+  </nav>
+{% endif %}

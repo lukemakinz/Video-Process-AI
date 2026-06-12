@@ -146,6 +146,28 @@ class Video(models.Model):
         default=Status.UPLOADED,
     )
     anonymization_error = models.TextField("błąd anonimizacji", blank=True)
+    anonymization_progress_percent = models.PositiveSmallIntegerField(
+        "postęp anonimizacji (%)",
+        default=0,
+    )
+    anonymization_progress_current = models.PositiveIntegerField(
+        "przetworzone klatki anonimizacji",
+        default=0,
+    )
+    anonymization_progress_total = models.PositiveIntegerField(
+        "liczba klatek anonimizacji",
+        default=0,
+    )
+    anonymization_progress_label = models.CharField(
+        "etap anonimizacji",
+        max_length=120,
+        blank=True,
+    )
+    anonymization_progress_updated_at = models.DateTimeField(
+        "ostatnia aktualizacja postępu anonimizacji",
+        null=True,
+        blank=True,
+    )
     anonymized_at = models.DateTimeField("zanonimizowano", null=True, blank=True)
     approved_for_analysis_at = models.DateTimeField(
         "zatwierdzono do analizy",

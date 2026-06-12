@@ -2,29 +2,32 @@
 {% comment %}Widżet oceny segmentu (HTMX). Parametry: analysis, segment, operation, hint_saved.{% endcomment %}
 <div id="seg-feedback-{{ segment.pk }}" class="flex flex-col gap-1">
   {% if hint_saved %}
-    <span class="text-xs text-emerald-700 font-medium">✓ Uwaga zapisana — AI uwzględni ją przy następnej analizie.</span>
+    <span class="text-xs text-emerald-700 font-medium">✓ {% trans "Uwaga zapisana — AI uwzględni ją przy następnej analizie." %}</span>
   {% elif segment.is_approved %}
-    <span class="text-xs text-emerald-700 font-medium">✓ Potwierdzono</span>
+    <span class="text-xs text-emerald-700 font-medium">✓ {% trans "Potwierdzono" %}</span>
   {% else %}
     <div class="flex items-center gap-2">
       <button type="button"
-              class="btn ghost small"
+              class="btn ghost small inline-flex items-center"
+              title="{% trans 'Potwierdź segment' %}" aria-label="{% trans 'Potwierdź segment' %}"
               hx-post="{% url 'segment_approve' analysis.pk segment.pk %}"
               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
               hx-target="#seg-feedback-{{ segment.pk }}" hx-swap="outerHTML">
-        👍 Dobrze
+        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v11"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
       </button>
       <details>
-        <summary class="btn ghost small cursor-pointer list-none">👎 Popraw</summary>
+        <summary class="btn ghost small cursor-pointer list-none inline-flex items-center" title="{% trans 'Popraw segment' %}" aria-label="{% trans 'Popraw segment' %}"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 14V3"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg></summary>
         <form class="mt-2 p-3 bg-slate-50 rounded-lg flex flex-col gap-2 w-72"
               hx-post="{% url 'segment_feedback' analysis.pk segment.pk %}"
               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
               hx-target="#seg-feedback-{{ segment.pk }}" hx-swap="outerHTML">
-          <textarea name="note" rows="2" class="input text-xs" placeholder="np. pieprz jest ciemniejszy niż sól"></textarea>
-          <select name="confused_with" class="select text-xs">
-            <option value="">{% trans "— powinno być (opcjonalnie) —" %}</option>
-            {% for a in operation.activities.all %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}
-          </select>
+          <textarea name="note" rows="2" class="input text-xs" placeholder="{% trans 'np. pieprz jest ciemniejszy niż sól' %}"></textarea>
+          {% if operation %}
+            <select name="confused_with" class="select text-xs">
+              <option value="">{% trans "— powinno być (opcjonalnie) —" %}</option>
+              {% for a in operation.activities.all %}<option value="{{ a.pk }}">{{ a.name }}</option>{% endfor %}
+            </select>
+          {% endif %}
           <button type="submit" class="btn primary small">{% trans "Zapisz uwagę dla AI" %}</button>
         </form>
       </details>
