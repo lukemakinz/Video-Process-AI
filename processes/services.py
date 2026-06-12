@@ -186,12 +186,14 @@ def anonymize_video(video):
 
         video.status = Video.Status.AWAITING_APPROVAL
         video.anonymized_at = timezone.now()
+        video.approved_for_analysis_at = None
         video.anonymization_error = f"Tryb anonimizacji: {mode}. Sprawdź podgląd przed zatwierdzeniem analizy."
         video.save(
             update_fields=[
                 "anonymized_file",
                 "status",
                 "anonymized_at",
+                "approved_for_analysis_at",
                 "anonymization_error",
             ]
         )

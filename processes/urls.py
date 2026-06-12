@@ -46,6 +46,11 @@ urlpatterns = [
     ),
     path("videos/<int:pk>/review/", views.video_review, name="video_review"),
     path(
+        "videos/<int:pk>/reanonymize/",
+        views.video_reanonymize,
+        name="video_reanonymize",
+    ),
+    path(
         "videos/<int:pk>/analysis-status/",
         views.analysis_status,
         name="analysis_status",

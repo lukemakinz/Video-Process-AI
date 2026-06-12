@@ -362,6 +362,27 @@ def video_review(request, pk):
     )
 
 
+@require_POST
+def video_reanonymize(request, pk):
+    video = get_object_or_404(
+        Video.objects.select_related("operation", "operation__process"),
+        pk=pk,
+    )
+    if video.status == Video.Status.ANALYZING:
+        messages.error(request, "Nie można ponowić anonimizacji w trakcie analizy.")
+        return redirect("video_review", pk=video.pk)
+    if not video.file:
+        messages.error(request, "Brakuje oryginalnego pliku wideo.")
+        return redirect("video_review", pk=video.pk)
+
+    try:
+        anonymize_video(video)
+        messages.success(request, "Anonimizacja została ponowiona z oryginalnego pliku.")
+    except Exception as exc:
+        messages.error(request, f"Ponowna anonimizacja nie powiodła się: {exc}")
+    return redirect("video_review", pk=video.pk)
+
+
 def analysis_status(request, pk):
     video = get_object_or_404(Video, pk=pk)
     analysis = video.analyses.order_by("-id").first()

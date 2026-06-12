@@ -86,6 +86,8 @@ class ProcessDemoTests(TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=Path(tmpdir)):
             video = self._video_with_file()
+            video.approved_for_analysis_at = timezone.now()
+            video.save(update_fields=["approved_for_analysis_at"])
             with (
                 patch("processes.services._opencv_face_blur", side_effect=no_faces),
                 patch("processes.services._full_frame_blur") as full_blur,
@@ -95,6 +97,7 @@ class ProcessDemoTests(TestCase):
             full_blur.assert_not_called()
             video.refresh_from_db()
             self.assertEqual(video.status, Video.Status.AWAITING_APPROVAL)
+            self.assertIsNone(video.approved_for_analysis_at)
             self.assertIn("opencv_face_blur_no_faces_detected", video.anonymization_error)
             with video.anonymized_file.open("rb") as handle:
                 self.assertEqual(handle.read(), b"opencv-output")
@@ -223,6 +226,34 @@ class ProcessDemoTests(TestCase):
         self.assertEqual(video.status, Video.Status.ANALYZING)
         self.assertIsNotNone(video.approved_for_analysis_at)
         self.assertRedirects(r, f"/videos/{video.pk}/review/")
+
+    def test_video_reanonymize_calls_service_and_allows_reapproval(self):
+        video = self._video_with_file()
+        video.anonymized_file.save("old.mp4", SimpleUploadedFile("old.mp4", b"old"), save=False)
+        video.status = Video.Status.COMPLETED
+        video.approved_for_analysis_at = timezone.now()
+        video.save(update_fields=["anonymized_file", "status", "approved_for_analysis_at"])
+        Analysis.objects.create(video=video, status=Analysis.Status.COMPLETED)
+
+        def fake_anonymize(video_obj):
+            video_obj.status = Video.Status.AWAITING_APPROVAL
+            video_obj.approved_for_analysis_at = None
+            video_obj.save(update_fields=["status", "approved_for_analysis_at"])
+            return video_obj
+
+        with patch("processes.views.anonymize_video", side_effect=fake_anonymize) as anonymize:
+            response = self.client.post(f"/videos/{video.pk}/reanonymize/")
+
+        anonymize.assert_called_once()
+        self.assertRedirects(response, f"/videos/{video.pk}/review/")
+        video.refresh_from_db()
+        self.assertEqual(video.status, Video.Status.AWAITING_APPROVAL)
+        self.assertIsNone(video.approved_for_analysis_at)
+
+        review = self.client.get(f"/videos/{video.pk}/review/")
+        body = review.content.decode()
+        self.assertIn("Zatwierdź i rozpocznij analizę Gemini", body)
+        self.assertIn("Ponów anonimizację z oryginału", body)
 
     # --- Etap 2: asystent AI (OpenAI) ---
 
