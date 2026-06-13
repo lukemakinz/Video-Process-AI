@@ -892,22 +892,23 @@ def _apply_temporal_quality_checks(segments):
     for lane in lanes.values():
         lane.sort(key=lambda item: (item["start_seconds"], item["end_seconds"]))
         if len(lane) >= 4:
-            raw_counts = Counter(
-                round(float(segment.get("_model_confidence", segment["confidence"])), 2)
+            # Jeśli model dał wysoką pewność (>=0.9) dla większości segmentów —
+            # niezależnie od tego, czy to dokładnie ta sama wartość, czy rozbita
+            # na np. 0.95 i 0.9 — to znaczy, że nie różnicował pewności. Wtedy
+            # liczbowa pewność jest niewiarygodna i oznaczamy WSZYSTKIE te segmenty.
+            high_conf = [
+                segment
                 for segment in lane
                 if float(segment.get("_model_confidence", segment["confidence"])) >= 0.9
-            )
-            if raw_counts:
-                plateau_value, plateau_count = raw_counts.most_common(1)[0]
-                if plateau_count >= max(4, int(len(lane) * 0.6)):
-                    for segment in lane:
-                        if round(float(segment.get("_model_confidence", segment["confidence"])), 2) == plateau_value:
-                            segment["confidence"] = min(segment["confidence"], 0.64)
-                            segment["confidence_unreliable"] = True
-                            _append_reason_note(
-                                segment,
-                                "Kalibracja: model użył powtarzalnej wysokiej pewności; liczbowa pewność jest niewiarygodna — zweryfikuj ręcznie.",
-                            )
+            ]
+            if len(high_conf) >= max(4, int(len(lane) * 0.6)):
+                for segment in high_conf:
+                    segment["confidence"] = min(segment["confidence"], 0.64)
+                    segment["confidence_unreliable"] = True
+                    _append_reason_note(
+                        segment,
+                        "Kalibracja: model użył powtarzalnej wysokiej pewności; liczbowa pewność jest niewiarygodna — zweryfikuj ręcznie.",
+                    )
 
         for index in range(1, len(lane) - 1):
             previous = lane[index - 1]

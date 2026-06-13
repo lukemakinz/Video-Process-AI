@@ -20,6 +20,7 @@
     {% comment %} Eksport CSV chwilowo wyłączony
     <a class="btn ghost" href="{% url 'analysis_export_csv' analysis.pk %}">{% trans "Eksport CSV" %}</a>
     {% endcomment %}
+    <a class="btn ghost" href="{% url 'video_review' analysis.video.pk %}">{% trans "Analizuj ponownie" %}</a>
     {% include "processes/_status_badge.html" with code=analysis.status label=analysis.get_status_display big=True no_dot=True %}
   </div>
 </section>

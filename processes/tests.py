@@ -88,16 +88,19 @@ class ProcessDemoTests(TestCase):
         from decimal import Decimal as D
         from processes.services import _apply_temporal_quality_checks
 
+        # Pewność rozbita na 0.95/0.9 (nie jedna wartość) — i tak ma być wykryta
+        # jako brak różnicowania i oznaczona jako niewiarygodna.
+        raw = [0.95, 0.9, 0.95, 0.9, 0.95]
         segs = []
-        for i, name in enumerate(["A", "B", "A", "B", "A"]):
+        for i, (name, conf) in enumerate(zip(["A", "B", "A", "B", "A"], raw)):
             segs.append(
                 {
                     "start_seconds": D(i * 3),
                     "end_seconds": D(i * 3 + 3),
                     "activity_name": name,
                     "operation_name": "",
-                    "confidence": 0.95,
-                    "_model_confidence": 0.95,
+                    "confidence": conf,
+                    "_model_confidence": conf,
                 }
             )
         _apply_temporal_quality_checks(segs)
