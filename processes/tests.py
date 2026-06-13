@@ -73,6 +73,17 @@ class ProcessDemoTests(TestCase):
         self.assertIn("stabilne, widoczne sygnały innej zdefiniowanej czynności", prompt)
         self.assertIn('"box_2d"', prompt)
 
+    def test_prompt_includes_universal_evidence_discipline(self):
+        from processes.services import build_multi_operation_prompt
+
+        single = build_analysis_prompt(self.operation)
+        multi = build_multi_operation_prompt(self.process, [self.operation])
+        for prompt in (single, multi):
+            self.assertIn("Dyscyplina dowodowa", prompt)
+            self.assertIn("najbliższy odpowiednik", prompt)
+            self.assertIn("nie wpisuj sygnałów, których nie widać", prompt)
+            self.assertIn("brak wyraźnego sygnału odróżniającego", prompt)
+
     def test_prompt_adds_pairwise_confusion_rules_from_feedback(self):
         from processes.models import ActivityHint
 

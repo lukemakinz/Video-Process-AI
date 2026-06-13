@@ -98,6 +98,33 @@ Używamy jej, gdy:
 - nazwa czynności zwrócona przez model nie pasuje do listy zdefiniowanych
   czynności.
 
+## Dyscyplina dowodowa (uniwersalna)
+
+Najczęstszy błąd modeli multimodalnych to **halucynacja dowodu**: model wpisuje
+sygnał, którego nie ma w kadrze, bo wnioskuje z kontekstu sceny (np. „tor
+wyścigowy → pewnie zakręt", „patelnia → pewnie smażenie", „klawiatura → pewnie
+pisanie"). Dlatego prompt zawiera domenowo-neutralny blok zasad
+(`_evidence_discipline_lines`), wstrzykiwany do obu wariantów promptu
+(jedno- i wielooperacyjnego). Zasady są celowo niezależne od domeny — działają
+tak samo dla jazdy, gotowania czy pracy biurowej:
+
+- klasyfikuj tylko po tym, co realnie widać/słychać w danym fragmencie, nie po
+  kontekście sceny ani samej obecności narzędzia/sprzętu,
+- decyduj po obserwowalnej **zmianie** (kierunek, obiekt, narzędzie, faza,
+  pozycja), a nie po tym, co „zwykle" towarzyszy czynności,
+- dla każdej czynności rozważ jej **najbliższy odpowiednik** (najłatwiejszy do
+  pomylenia) i wybierz ją tylko, gdy widać sygnał jednoznacznie je oddzielający;
+  inaczej `niepewne`,
+- `evidence` może zawierać tylko obserwacje możliwe do wskazania na klatce — bez
+  sygnałów, których nie widać (np. „skręt", gdy kierunek się nie zmienia),
+- brak wyraźnego sygnału odróżniającego = `niepewne`, a nie najbardziej
+  prawdopodobny strzał.
+
+Reguła jest świadomie ogólna, żeby prompt pozostał uniwersalny. Domenowo-
+specyficzne rozróżnienia (np. „prosto vs zakręt") nie są zaszywane w kodzie —
+budują się przez definicje czynności (`Rozpoznaj, gdy` / `Nie rozpoznawaj, gdy`)
+oraz przez pary `confused_with` z feedbacku użytkownika.
+
 ## Kalibracja confidence
 
 Modelowe `confidence` jest obcinane przez aplikację, gdy odpowiedź wygląda na

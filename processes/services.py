@@ -441,6 +441,20 @@ def _confidence_rule_lines():
     ]
 
 
+def _evidence_discipline_lines():
+    """Domenowo-neutralne reguły przeciw halucynacji dowodu i nadmiernej pewności.
+    Działają tak samo dla jazdy, kuchni, biura itd. — opierają decyzję na tym,
+    co realnie widać w kadrze, a nie na kontekście sceny czy obecności sprzętu."""
+    return [
+        "Dyscyplina dowodowa (obowiązuje dla każdej domeny i każdej czynności):",
+        "- klasyfikuj wyłącznie na podstawie tego, co realnie widać lub słychać w danym fragmencie; nie zakładaj czynności na podstawie kontekstu sceny ani samej obecności narzędzia/sprzętu/stanowiska w kadrze,",
+        "- decyduj na podstawie obserwowalnej zmiany (kierunku, obiektu, narzędzia, fazy, pozycji), a nie na podstawie tego, co zwykle towarzyszy danej czynności,",
+        "- dla rozważanej czynności wskaż jej najbliższy odpowiednik (najłatwiejszy do pomylenia) i wybierz tę czynność tylko wtedy, gdy widać sygnał jednoznacznie oddzielający ją od tego odpowiednika; w przeciwnym razie użyj \"" + SYSTEM_UNCERTAIN_ACTIVITY + "\",",
+        "- w evidence wpisuj tylko obserwacje możliwe do wskazania na konkretnej klatce; nie wpisuj sygnałów, których nie widać (np. \"narzędzie w ruchu\", gdy nic się nie porusza, albo \"skręt\", gdy kierunek się nie zmienia),",
+        f'- brak wyraźnego sygnału odróżniającego oznacza "{SYSTEM_UNCERTAIN_ACTIVITY}", a nie najbardziej prawdopodobny wybór.',
+    ]
+
+
 def _granularity_rule_lines():
     return [
         "Granularność segmentów:",
@@ -538,6 +552,8 @@ def build_analysis_prompt(operation, duration_seconds=None):
         )
     lines.extend(
         [
+            *_evidence_discipline_lines(),
+            "",
             "Zasady segmentacji:",
             "- segmenty nie mogą nachodzić na siebie,",
             *_duration_rule_lines(duration_seconds),
@@ -628,6 +644,8 @@ def build_multi_operation_prompt(process, operations, duration_seconds=None):
             lines.extend(confusion_lines)
     lines.extend(
         [
+            "",
+            *_evidence_discipline_lines(),
             "",
             "ZASADY SEGMENTACJI:",
             *_duration_rule_lines(duration_seconds),
