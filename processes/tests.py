@@ -83,6 +83,11 @@ class ProcessDemoTests(TestCase):
             self.assertIn("najbliższy odpowiednik", prompt)
             self.assertIn("nie wpisuj sygnałów, których nie widać", prompt)
             self.assertIn("brak wyraźnego sygnału odróżniającego", prompt)
+            # wzmocnienia uniwersalne: obserwacja-przed-etykietą + niezależna ocena
+            self.assertIn('"observed"', prompt)
+            self.assertIn("KOLEJNOŚĆ MA ZNACZENIE", prompt)
+            self.assertIn("oceniaj każdy fragment NIEZALEŻNIE", prompt)
+            self.assertLess(prompt.index('"observed"'), prompt.index('"activity"'))
 
     def test_confidence_plateau_marks_segments_unreliable(self):
         from decimal import Decimal as D

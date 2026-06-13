@@ -415,6 +415,7 @@ def _segment_contract_lines(include_operation=False):
             f"{operation_field}"
             '"start_seconds":0.0,'
             '"end_seconds":1.0,'
+            '"observed":"neutralny opis tego, co realnie widać w kadrze, BEZ nazywania czynności",'
             '"activity":"nazwa czynności albo niepewne",'
             '"confidence":0.62,'
             '"alternative_activity":"inna możliwa czynność albo null",'
@@ -424,6 +425,7 @@ def _segment_contract_lines(include_operation=False):
             '"confidence_reason":"dlaczego confidence ma właśnie taki poziom"'
             "}]}"
         ),
+        'KOLEJNOŚĆ MA ZNACZENIE: najpierw wypełnij "observed" (sam obraz, bez interpretacji i bez nazwy czynności), a "activity" wybierz wyłącznie na podstawie tego, co zapisałeś w "observed". Jeśli "observed" nie zawiera sygnału jednoznacznie wskazującego czynność — wpisz "niepewne".',
         'Nie używaj kluczy typu "box_2d", bounding box ani dodatkowych opakowań; lista segmentów ma być wyłącznie pod kluczem "segments".',
     ]
 
@@ -451,6 +453,8 @@ def _evidence_discipline_lines():
         "- decyduj na podstawie obserwowalnej zmiany (kierunku, obiektu, narzędzia, fazy, pozycji), a nie na podstawie tego, co zwykle towarzyszy danej czynności,",
         "- dla rozważanej czynności wskaż jej najbliższy odpowiednik (najłatwiejszy do pomylenia) i wybierz tę czynność tylko wtedy, gdy widać sygnał jednoznacznie oddzielający ją od tego odpowiednika; w przeciwnym razie użyj \"" + SYSTEM_UNCERTAIN_ACTIVITY + "\",",
         "- w evidence wpisuj tylko obserwacje możliwe do wskazania na konkretnej klatce; nie wpisuj sygnałów, których nie widać (np. \"narzędzie w ruchu\", gdy nic się nie porusza, albo \"skręt\", gdy kierunek się nie zmienia),",
+        "- oceniaj każdy fragment NIEZALEŻNIE, na podstawie jego własnych klatek; nie wybieraj czynności dlatego, że pasuje do oczekiwanej kolejności, rytmu lub do tego, co było przed/po — nie układaj „zgrabnego\" naprzemiennego wzoru, jeśli obraz go nie potwierdza,",
+        "- confidence ma odzwierciedlać, na ile JEDNOZNACZNY i widoczny jest w tym fragmencie sygnał odróżniający tę czynność od najbliższej alternatywy, a nie ogólne wrażenie, że czynność pasuje,",
         f'- brak wyraźnego sygnału odróżniającego oznacza "{SYSTEM_UNCERTAIN_ACTIVITY}", a nie najbardziej prawdopodobny wybór.',
     ]
 
