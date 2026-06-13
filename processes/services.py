@@ -1078,6 +1078,22 @@ def _gemini_client():
     return genai.Client(api_key=settings.GEMINI_API_KEY)
 
 
+def _generation_config():
+    """Konfiguracja generowania dla analizy wideo: niska temperatura + seed dają
+    powtarzalne, mniej „kreatywne" wyniki (domyślne ustawienia modelu powodują
+    duże różnice między uruchomieniami tego samego nagrania). Zwraca None, gdy
+    typy SDK są niedostępne — wtedy używane są domyślne ustawienia API."""
+    try:
+        from google.genai import types
+    except Exception:
+        return None
+    kwargs = {"temperature": float(getattr(settings, "GEMINI_VIDEO_TEMPERATURE", 0.0) or 0.0)}
+    seed = int(getattr(settings, "GEMINI_VIDEO_SEED", -1))
+    if seed >= 0:
+        kwargs["seed"] = seed
+    return types.GenerateContentConfig(**kwargs)
+
+
 def _video_content_part(uploaded):
     """Owija przesłany plik w Part z ustawionym fps, gdy GEMINI_VIDEO_FPS > 0.
     Domyślne próbkowanie modelu (~1 fps) nie wystarcza do rozróżniania krótkich,
@@ -1291,6 +1307,7 @@ def _analyze_with_gemini(video, prompt, model_name=None):
     response = client.models.generate_content(
         model=model_name or settings.GEMINI_VIDEO_MODEL,
         contents=[_video_content_part(uploaded), prompt],
+        config=_generation_config(),
     )
     meta = getattr(response, "usage_metadata", None)
     usage = None

@@ -157,6 +157,22 @@ class ProcessDemoTests(TestCase):
             self.assertIsNot(part, up)
             self.assertEqual(float(part.video_metadata.fps), 5.0)
 
+    def test_generation_config_uses_temperature_and_seed_from_settings(self):
+        try:
+            from google.genai import types  # noqa: F401
+        except Exception:
+            self.skipTest("google.genai niedostępne")
+        from processes.services import _generation_config
+
+        with override_settings(GEMINI_VIDEO_TEMPERATURE=0.0, GEMINI_VIDEO_SEED=42):
+            cfg = _generation_config()
+            self.assertEqual(cfg.temperature, 0.0)
+            self.assertEqual(cfg.seed, 42)
+        with override_settings(GEMINI_VIDEO_TEMPERATURE=0.3, GEMINI_VIDEO_SEED=-1):
+            cfg = _generation_config()
+            self.assertEqual(cfg.temperature, 0.3)
+            self.assertIsNone(cfg.seed)
+
     def test_prompt_adds_pairwise_confusion_rules_from_feedback(self):
         from processes.models import ActivityHint
 

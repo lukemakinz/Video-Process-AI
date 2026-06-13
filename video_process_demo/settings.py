@@ -190,6 +190,12 @@ GEMINI_VIDEO_TOKENS_PER_SECOND = _float_env("GEMINI_VIDEO_TOKENS_PER_SECOND", 26
 # skręt) — model zaczyna konfabulować. Wyższy fps = więcej realnych klatek i
 # proporcjonalnie wyższy koszt tokenów wideo. 0 = nie ustawiaj (domyślne API).
 GEMINI_VIDEO_FPS = _float_env("GEMINI_VIDEO_FPS", 5.0)
+# Temperatura analizy wideo. Domyślne (wysokie) ustawienie modelu powoduje, że
+# kolejne uruchomienia tego samego nagrania dają mocno różne wyniki. 0.0 = możliwie
+# powtarzalnie i mniej „kreatywnie". Podnieś tylko, jeśli świadomie chcesz wariancji.
+GEMINI_VIDEO_TEMPERATURE = _float_env("GEMINI_VIDEO_TEMPERATURE", 0.0)
+# Ziarno losowości dla powtarzalności. Ujemne = nie ustawiaj (pełna losowość API).
+GEMINI_VIDEO_SEED = int(_float_env("GEMINI_VIDEO_SEED", 42))
 # Kurs USD->PLN tylko do orientacyjnego przeliczenia w UI.
 GEMINI_USD_PLN_RATE = _float_env("GEMINI_USD_PLN_RATE", 4.00)
 
