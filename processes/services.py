@@ -1113,9 +1113,9 @@ def _assist_mock(fields, mode, target):
         description = f"{base} Opis doprecyzowany na potrzeby segmentacji wideo."
     full = {
         "description": description,
-        "recognition_rules": "- widoczny jest początek i koniec czynności\n- działania odpowiadają nazwie czynności\n- obiekt lub maszyna w oczekiwanym kontekście",
-        "exclusion_rules": "- operator wykonuje inną zdefiniowaną czynność\n- obraz nie pozwala potwierdzić działania\n- widoczny jest tylko etap przygotowania lub zakończenia",
-        "possible_confusions": "- inne\n- niepewne",
+        "recognition_rules": "- dominująca, widoczna zmiana odpowiadająca tej czynności utrzymuje się przez większość fragmentu\n- sygnał jest duży i czytelny w kadrze, nie wymaga rozpoznawania drobnych detali",
+        "exclusion_rules": "- inna, podobna czynność ma wyraźniejszy sygnał w tym fragmencie\n- brak wyraźnego sygnału odróżniającego od czynności-bliźniaka — wtedy wybierz \"niepewne\", nie zgaduj",
+        "possible_confusions": "- najbardziej podobna czynność z listy\n- niepewne",
     }
     if target:
         return {target: full.get(target, "")}
@@ -1149,23 +1149,30 @@ def assist_activity(operation, fields, mode="generate", target=None):
         else '{"description":"...","recognition_rules":"- ...","exclusion_rules":"- ...","possible_confusions":"- ..."}'
     )
     prompt = f"""
-Jesteś światowej klasy prompt engineerem specjalizującym się w analizie wideo przez multimodalne modele AI.
+Jesteś światowej klasy prompt engineerem. Tworzysz definicje czynności do automatycznej analizy wideo.
 {intent}
 
-KONTEKST: opis, który tworzysz, trafia WPROST do promptu, którym inny model klasyfikuje fragmenty nagrania wideo z produkcji gniazdowej. Od jego jakości zależy, czy model poprawnie rozpozna tę czynność. Musi być na tyle precyzyjny i jednoznaczny, żeby model łatwo i pewnie odróżnił tę czynność od innych na filmie.
+KONTEKST: tekst, który tworzysz, trafia WPROST do promptu, którym inny model wideo dzieli nagranie na segmenty i przypisuje czynności. Działa to UNIWERSALNIE w różnych domenach — praca w kuchni, fabryce, biurze, hobby (np. sim racing) i innych. Nie zakładaj konkretnej branży. Twoim celem jest tak opisać tę czynność, żeby model pewnie odróżnił ją od czynności NAJBARDZIEJ do niej podobnej.
 
-ZASADY PISANIA (krytyczne):
-- Opisuj WYŁĄCZNIE to, co realnie widać w kadrze: pozycje i ruch rąk, narzędzia, maszyny, detale, ułożenie ciała, elementy w tle. Pisz tak, by dało się to potwierdzić na pojedynczej klatce.
-- ZAKAZane są meta-opisy w stylu „analiza wideo dotycząca sytuacji, w której…". Zamiast tego od razu opisz obserwowalny obraz.
-- Podawaj konkretne, ROZRÓŻNIAJĄCE cechy — najlepiej jedną dominującą, łatwą do sprawdzenia (np. „górna szprycha kierownicy pionowo do góry, szprychy symetryczne").
-- Jeśli czynność wykonuje maszyna, dodaj widoczny sygnał pracy (lampka, ruch wrzeciona/taśmy, wiór, wyświetlacz).
-- Dodawaj próg tolerancji, by drobne warianty nie wpadały w sąsiednią czynność.
+ZASADA NACZELNA (najważniejsza):
+- Oprzyj rozpoznanie na OBSERWOWALNEJ ZMIANIE i na kontraście z najbliższym „bliźniakiem" (czynnością najłatwiejszą do pomylenia), a nie na samym kontekście sceny czy obecności sprzętu.
+- Wskaż JEDEN dominujący sygnał, który jest DUŻY i czytelny w kadrze oraz utrzymuje się przez czynność — zamiast listy drobnych detali (np. układ szprych, napisy, ułożenie palców). Mikro-detale, których model nie rozdzieli na nagraniu, prowokują go do zgadywania i ZMYŚLANIA dowodu.
+
+ZASADY PISANIA:
+- Opisuj WYŁĄCZNIE to, co realnie widać w kadrze (obiekty, ruch i pozycja rąk/ciała, narzędzia, co się zmienia), tak by dało się to potwierdzić na pojedynczej klatce.
+- ZAKAZane: meta-opisy („analiza sytuacji, w której…") oraz opisy CELU/INTENCJI/ocen. Od razu opisuj obraz.
 - Zwięźle, rzeczowo, po polsku.
 
 ZNACZENIE PÓL:
-- description (Opis tego, co powinno być widoczne): co dokładnie widać w kadrze podczas tej czynności.
-- recognition_rules (Warunki rozpoznania): lista obserwowalnych sygnałów, po których model ma ją rozpoznać.
-- exclusion_rules (Warunki wykluczenia): kiedy NIE przypisywać tej czynności — najlepiej wskazując konkurencyjną czynność, z którą bywa mylona.
+- description: co dokładnie widać w kadrze podczas tej czynności (sam obserwowalny obraz, bez celu i oceny).
+- recognition_rules: 1–3 najpewniejsze, widoczne sygnały; na pierwszym miejscu dominująca, łatwa do sprawdzenia ZMIANA.
+- exclusion_rules: kiedy NIE przypisywać tej czynności. OBOWIĄZKOWO: (a) nazwij czynność-bliźniaka, z którą bywa mylona, oraz widoczny sygnał, który je oddziela; (b) dopisz, że przy braku tego sygnału model ma wybrać „niepewne", a nie zgadywać. ZAKAZane reguły o jakości, technice, poprawności, bezpieczeństwie, wyniku czy szybkości wykonania — tylko o tym, co WIDAĆ.
+
+PRZYKŁADY DOBREGO KONTRASTU (różne domeny, tylko dla stylu):
+- kuchnia: „zawartość naczynia mieszana ruchem okrężnym" vs bliźniak „składnik przenoszony do/z naczynia";
+- biuro: „palce uderzają w klawisze, treść na ekranie przyrasta" vs bliźniak „dłonie nieruchome, wzrok na ekranie (czytanie)";
+- fabryka: „detal wkładany/mocowany w uchwycie" vs bliźniak „uchwyt pusty, maszyna pracuje";
+- sim racing: „tor przed pojazdem wyraźnie zakręca" vs bliźniak „tor biegnie prosto".
 
 DANE WEJŚCIOWE:
 Proces: {operation.process.name}

@@ -836,7 +836,7 @@ class ProcessDemoTests(TestCase):
         })
         self.assertEqual(r.status_code, 200)
         body = r.content.decode()
-        self.assertIn("operator wykonuje inną zdefiniowaną czynność", body)
+        self.assertIn("niepewne", body)
 
     def test_activity_ai_field_requires_activity_name(self):
         url = f"/operations/{self.operation.pk}/activities/ai-field/"
