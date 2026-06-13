@@ -502,6 +502,27 @@ def _active_confusion_rule_lines(activities, indent=""):
     return lines
 
 
+def _activity_hint_lines(activity, indent=""):
+    """Linie wskazówek pod czynnością: korekty z „Popraw" (is_positive=False)
+    oraz zbiorcze wzmocnienie z potwierdzeń „Dobrze" (is_positive=True)."""
+    lines = []
+    corrections = list(
+        activity.hints.filter(is_active=True, is_positive=False).select_related("confused_with")
+    )
+    if corrections:
+        lines.append(f"{indent}Wskazówki z wcześniejszych korekt:")
+        for hint in corrections:
+            suffix = f" (bywa mylone z: {hint.confused_with.name})" if hint.confused_with else ""
+            lines.append(f"{indent}- {hint.text}{suffix}")
+    positive = activity.hints.filter(is_active=True, is_positive=True).count()
+    if positive:
+        lines.append(
+            f"{indent}Potwierdzone przez człowieka jako poprawne rozpoznanie tej czynności: "
+            f"{positive} raz(y) — to sprawdzony wzorzec, traktuj go jako wiarygodny."
+        )
+    return lines
+
+
 def build_analysis_prompt(operation, duration_seconds=None):
     activities = list(operation.activities.all())
     lines = [
@@ -534,12 +555,7 @@ def build_analysis_prompt(operation, duration_seconds=None):
             f"Minimalny czas trwania: {minimum}",
             f"Wykonawca: {activity.get_performed_by_display()}",
         ]
-        active_hints = list(activity.hints.filter(is_active=True))
-        if active_hints:
-            activity_lines.append("Wskazówki z wcześniejszych korekt:")
-            for hint in active_hints:
-                suffix = f" (bywa mylone z: {hint.confused_with.name})" if hint.confused_with else ""
-                activity_lines.append(f"- {hint.text}{suffix}")
+        activity_lines.extend(_activity_hint_lines(activity))
         activity_lines.append("")
         lines.extend(activity_lines)
     confusion_lines = _active_confusion_rule_lines(activities)
@@ -587,12 +603,7 @@ def _render_activity_block(index, activity):
         f"     Minimalny czas trwania: {minimum}",
         f"     Wykonawca: {activity.get_performed_by_display()}",
     ]
-    active_hints = list(activity.hints.filter(is_active=True))
-    if active_hints:
-        block.append("     Wskazówki z wcześniejszych korekt:")
-        for hint in active_hints:
-            suffix = f" (bywa mylone z: {hint.confused_with.name})" if hint.confused_with else ""
-            block.append(f"     - {hint.text}{suffix}")
+    block.extend(_activity_hint_lines(activity, indent="     "))
     return block
 
 

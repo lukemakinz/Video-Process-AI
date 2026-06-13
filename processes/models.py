@@ -328,6 +328,9 @@ class ActivityHint(TimeStampedModel):
         on_delete=models.SET_NULL,
     )
     is_active = models.BooleanField("aktywna", default=True)
+    # True dla przykładów potwierdzonych przez człowieka („Dobrze") — pozytywne
+    # wzmocnienie. False (domyślnie) to korekta z „Popraw".
+    is_positive = models.BooleanField("przykład pozytywny", default=False)
 
     class Meta:
         ordering = ["-created_at"]

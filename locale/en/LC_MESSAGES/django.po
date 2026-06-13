@@ -998,6 +998,10 @@ msgid "niewiarygodna"
 msgstr "unreliable"
 
 #: templates/processes/analysis_detail.html
+msgid "Pewność orientacyjna — model nie różnicował pewności (zob. notkę u góry)."
+msgstr "Approximate confidence — the model did not differentiate confidence (see the note above)."
+
+#: templates/processes/analysis_detail.html
 msgid "Analizuj ponownie"
 msgstr "Analyze again"
 

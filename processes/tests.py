@@ -955,6 +955,27 @@ class ProcessDemoTests(TestCase):
         self.assertIn("doprecyzowano", body)
         self.assertFalse(self.operation.activities.filter(name="krojenie pomidora").exists())
 
+    def test_approving_segment_creates_positive_example_used_in_prompt(self):
+        from processes.models import ActivityHint
+        from processes.services import build_analysis_prompt
+
+        video = Video.objects.create(
+            operation=self.operation, original_filename="d.mp4", duration_seconds=Decimal("10.00")
+        )
+        analysis = Analysis.objects.create(video=video, status=Analysis.Status.COMPLETED)
+        segment = AnalysisSegment.objects.create(
+            analysis=analysis, activity=self.load, activity_name="załadunek detalu",
+            start_seconds=Decimal("0"), end_seconds=Decimal("5"), confidence=0.9,
+        )
+        url = f"/analyses/{analysis.pk}/segments/{segment.pk}/approve/"
+        self.client.post(url)
+        self.client.post(url)  # ponowne zatwierdzenie nie duplikuje
+        positives = ActivityHint.objects.filter(activity=self.load, is_positive=True)
+        self.assertEqual(positives.count(), 1)
+        self.assertTrue(positives.first().source_segment_id)
+        prompt = build_analysis_prompt(self.operation)
+        self.assertIn("Potwierdzone przez człowieka jako poprawne rozpoznanie", prompt)
+
     # --- Etap 3: UX korekty wyniku ---
 
     def test_segments_needing_review_flags_low_confidence_and_uncertain(self):

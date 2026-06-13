@@ -676,6 +676,19 @@ def segment_approve(request, analysis_pk, segment_pk):
     )
     segment.is_approved = True
     segment.save(update_fields=["is_approved", "updated_at"])
+    # „Dobrze" tworzy pozytywny przykład: potwierdza człowiekiem, że ta czynność
+    # została rozpoznana poprawnie. Zasila kolejne analizy (patrz _activity_hint_lines).
+    if segment.activity_id:
+        from .models import ActivityHint
+
+        ActivityHint.objects.get_or_create(
+            source_segment=segment,
+            is_positive=True,
+            defaults={
+                "activity": segment.activity,
+                "text": "Potwierdzone przez człowieka jako poprawne rozpoznanie tej czynności.",
+            },
+        )
     operation = segment.operation or (
         segment.activity.operation if segment.activity_id else analysis.video.operation
     )

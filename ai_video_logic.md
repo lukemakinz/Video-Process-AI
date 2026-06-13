@@ -238,10 +238,18 @@ To buduje pary rozróżniające czynności, zamiast tylko dopisywać luźne nota
 
 ## Co daje `Dobrze`
 
-`Dobrze` oznacza segment jako zatwierdzony i wpływa na review/eksport. Obecnie
-nie tworzy pozytywnego przykładu dla promptu. Jeśli chcemy, żeby zatwierdzone
-segmenty też uczyły przyszłe analizy, trzeba dodać osobny mechanizm przykładów
-pozytywnych.
+`Dobrze` oznacza segment jako zatwierdzony (wpływa na review/eksport) ORAZ tworzy
+**pozytywny przykład**: `ActivityHint` z `is_positive=True` i `source_segment`
+wskazującym zatwierdzony segment. Powtórne zatwierdzenie tego samego segmentu nie
+duplikuje wpisu (`get_or_create`). Pozytywne przykłady przetrwają re-analizę, bo
+`source_segment` ma `on_delete=SET_NULL`.
+
+W prompcie (`_activity_hint_lines`) korekty z `Popraw` (`is_positive=False`) i
+potwierdzenia z `Dobrze` (`is_positive=True`) są rozdzielone: korekty renderują
+się jako wskazówki/pary `confused_with`, a potwierdzenia jako zbiorcze
+wzmocnienie („potwierdzone przez człowieka N raz(y) — sprawdzony wzorzec").
+Domyka to pętlę uczenia: złe poprawiasz, dobre potwierdzasz, a model dostaje oba
+sygnały.
 
 ## Próg przeglądu
 
