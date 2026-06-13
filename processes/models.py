@@ -283,6 +283,10 @@ class AnalysisSegment(TimeStampedModel):
     start_seconds = models.DecimalField(_("od"), max_digits=10, decimal_places=2)
     end_seconds = models.DecimalField(_("do"), max_digits=10, decimal_places=2)
     confidence = models.FloatField(_("pewność"), default=0.0)
+    # True, gdy model nie różnicował pewności (zwrócił stałe wysokie wartości dla
+    # większości segmentów). Wtedy liczbowa pewność jest niewiarygodna i UI nie
+    # powinno jej pokazywać jako realnego pomiaru.
+    confidence_unreliable = models.BooleanField(_("pewność niewiarygodna"), default=False)
     reason = models.TextField(_("uzasadnienie"), blank=True)
     is_approved = models.BooleanField(_("zatwierdzony"), default=False)
 

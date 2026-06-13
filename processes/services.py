@@ -903,9 +903,10 @@ def _apply_temporal_quality_checks(segments):
                     for segment in lane:
                         if round(float(segment.get("_model_confidence", segment["confidence"])), 2) == plateau_value:
                             segment["confidence"] = min(segment["confidence"], 0.64)
+                            segment["confidence_unreliable"] = True
                             _append_reason_note(
                                 segment,
-                                "Kalibracja: model użył powtarzalnej wysokiej pewności; segment wymaga ostrożnej weryfikacji.",
+                                "Kalibracja: model użył powtarzalnej wysokiej pewności; liczbowa pewność jest niewiarygodna — zweryfikuj ręcznie.",
                             )
 
         for index in range(1, len(lane) - 1):
@@ -1070,6 +1071,29 @@ def _gemini_client():
     from google import genai
 
     return genai.Client(api_key=settings.GEMINI_API_KEY)
+
+
+def _video_content_part(uploaded):
+    """Owija przesłany plik w Part z ustawionym fps, gdy GEMINI_VIDEO_FPS > 0.
+    Domyślne próbkowanie modelu (~1 fps) nie wystarcza do rozróżniania krótkich,
+    szybkich ruchów, więc podbijamy liczbę klatek widzianych przez model. Gdy fps
+    jest 0/niezdefiniowany lub typy nie są dostępne — zwracamy plik bez zmian."""
+    fps = float(getattr(settings, "GEMINI_VIDEO_FPS", 0) or 0)
+    if fps <= 0:
+        return uploaded
+    try:
+        from google.genai import types
+
+        return types.Part(
+            file_data=types.FileData(
+                file_uri=uploaded.uri,
+                mime_type=getattr(uploaded, "mime_type", None),
+            ),
+            video_metadata=types.VideoMetadata(fps=fps),
+        )
+    except Exception:
+        # Nie blokuj analizy, jeśli SDK nie wspiera VideoMetadata — wróć do domyślnego próbkowania.
+        return uploaded
 
 
 def _openai_client():
@@ -1254,7 +1278,7 @@ def _analyze_with_gemini(video, prompt, model_name=None):
     uploaded = _wait_for_uploaded_file(client, uploaded)
     response = client.models.generate_content(
         model=model_name or settings.GEMINI_VIDEO_MODEL,
-        contents=[uploaded, prompt],
+        contents=[_video_content_part(uploaded), prompt],
     )
     meta = getattr(response, "usage_metadata", None)
     usage = None
@@ -1308,6 +1332,7 @@ def persist_segments(analysis, segments):
                 start_seconds=segment["start_seconds"],
                 end_seconds=segment["end_seconds"],
                 confidence=segment["confidence"],
+                confidence_unreliable=segment.get("confidence_unreliable", False),
                 reason=segment["reason"],
             )
             for segment in segments

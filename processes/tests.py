@@ -84,6 +84,45 @@ class ProcessDemoTests(TestCase):
             self.assertIn("nie wpisuj sygnałów, których nie widać", prompt)
             self.assertIn("brak wyraźnego sygnału odróżniającego", prompt)
 
+    def test_confidence_plateau_marks_segments_unreliable(self):
+        from decimal import Decimal as D
+        from processes.services import _apply_temporal_quality_checks
+
+        segs = []
+        for i, name in enumerate(["A", "B", "A", "B", "A"]):
+            segs.append(
+                {
+                    "start_seconds": D(i * 3),
+                    "end_seconds": D(i * 3 + 3),
+                    "activity_name": name,
+                    "operation_name": "",
+                    "confidence": 0.95,
+                    "_model_confidence": 0.95,
+                }
+            )
+        _apply_temporal_quality_checks(segs)
+        self.assertTrue(all(s.get("confidence_unreliable") for s in segs))
+        self.assertTrue(all(s["confidence"] <= 0.64 for s in segs))
+
+    def test_video_content_part_sets_fps_from_settings(self):
+        from processes.services import _video_content_part
+
+        class FakeUpload:
+            uri = "files/abc"
+            mime_type = "video/mp4"
+
+        up = FakeUpload()
+        with override_settings(GEMINI_VIDEO_FPS=0):
+            self.assertIs(_video_content_part(up), up)
+        try:
+            from google.genai import types  # noqa: F401
+        except Exception:
+            self.skipTest("google.genai niedostępne")
+        with override_settings(GEMINI_VIDEO_FPS=5):
+            part = _video_content_part(up)
+            self.assertIsNot(part, up)
+            self.assertEqual(float(part.video_metadata.fps), 5.0)
+
     def test_prompt_adds_pairwise_confusion_rules_from_feedback(self):
         from processes.models import ActivityHint
 

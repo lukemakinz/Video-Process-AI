@@ -992,6 +992,16 @@ msgstr ""
 "After upload the app creates a face-anonymized version. Gemini analysis "
 "starts only after preview and approval."
 
+#: templates/processes/analysis_detail.html:41
+#: templates/processes/analysis_detail.html:266
+msgid "niewiarygodna"
+msgstr "unreliable"
+
+#: templates/processes/analysis_detail.html:41
+#: templates/processes/analysis_detail.html:266
+msgid "Model nie różnicował pewności — liczba jest niewiarygodna."
+msgstr "The model did not differentiate confidence — the value is unreliable."
+
 #~ msgid "Nieprawidłowy moment podziału."
 #~ msgstr "Invalid split point."
 

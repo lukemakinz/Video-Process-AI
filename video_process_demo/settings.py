@@ -185,6 +185,11 @@ GEMINI_PRICE_OUTPUT_PER_M = _float_env("GEMINI_PRICE_OUTPUT_PER_M", 2.50)
 # Przybliżona liczba tokenów na sekundę wideo (do szacunku w trybie mock,
 # gdy API nie zwraca realnego zużycia tokenów).
 GEMINI_VIDEO_TOKENS_PER_SECOND = _float_env("GEMINI_VIDEO_TOKENS_PER_SECOND", 263.0)
+# Częstotliwość próbkowania klatek wysyłanych do Gemini. Domyślne ~1 fps modelu
+# nie wystarcza do rozróżniania krótkich, szybkich ruchów (np. jazda prosto vs
+# skręt) — model zaczyna konfabulować. Wyższy fps = więcej realnych klatek i
+# proporcjonalnie wyższy koszt tokenów wideo. 0 = nie ustawiaj (domyślne API).
+GEMINI_VIDEO_FPS = _float_env("GEMINI_VIDEO_FPS", 5.0)
 # Kurs USD->PLN tylko do orientacyjnego przeliczenia w UI.
 GEMINI_USD_PLN_RATE = _float_env("GEMINI_USD_PLN_RATE", 4.00)
 

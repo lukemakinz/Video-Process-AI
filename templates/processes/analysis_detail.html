@@ -37,7 +37,11 @@
             {{ segment.start_seconds|seconds_time }}–{{ segment.end_seconds|seconds_time }}
           </button>
           <span class="text-amber-700">{{ segment.activity_name }}</span>
-          <span class="conf {{ segment.confidence|confidence_level }}">{{ segment.confidence|confidence_percent }}</span>
+          {% if segment.confidence_unreliable %}
+            <span class="conf low" title="{% trans 'Model nie różnicował pewności — liczba jest niewiarygodna.' %}">{% trans "niewiarygodna" %}</span>
+          {% else %}
+            <span class="conf {{ segment.confidence|confidence_level }}">{{ segment.confidence|confidence_percent }}</span>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>
@@ -257,7 +261,13 @@
             <td class="text-right font-mono text-slate-600">{{ segment.duration_seconds|seconds_label }}</td>
             <td class="text-slate-600">{{ segment.operation_name|default:"—" }}</td>
             {% include "processes/_segment_activity_cell.html" with analysis=analysis segment=segment operation=segment.operation|default:operation saved=False %}
-            <td><span class="conf {{ segment.confidence|confidence_level }}">{{ segment.confidence|confidence_percent }}</span></td>
+            <td>
+              {% if segment.confidence_unreliable %}
+                <span class="conf low" title="{% trans 'Model nie różnicował pewności — liczba jest niewiarygodna.' %}">{% trans "niewiarygodna" %}</span>
+              {% else %}
+                <span class="conf {{ segment.confidence|confidence_level }}">{{ segment.confidence|confidence_percent }}</span>
+              {% endif %}
+            </td>
             <td class="text-slate-500 max-w-xs">{{ segment.reason|default:"—" }}</td>
             <td class="text-right">
               <div class="inline-flex items-center gap-1">
