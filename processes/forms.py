@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from django import forms
+from django.conf import settings
+from django.utils.translation import gettext_lazy as _
 
 from .models import Activity, AnalysisSegment, Operation, Process, Video
 
@@ -111,10 +113,16 @@ class ProcessVideoUploadForm(StyledFormMixin, forms.ModelForm):
         widget=forms.CheckboxSelectMultiple(attrs={"class": ""}),
         help_text="Zaznacz operacje, które mogą wystąpić na nagraniu (możesz wybrać jedną).",
     )
+    analysis_model_name = forms.ChoiceField(
+        label=_("Model analizy"),
+        choices=settings.GEMINI_VIDEO_MODEL_CHOICES,
+        initial=settings.GEMINI_VIDEO_MODEL,
+        help_text=_("Flash jest szybszy i tańszy. Pro zwykle lepiej radzi sobie z trudniejszą interpretacją wideo."),
+    )
 
     class Meta:
         model = Video
-        fields = ["file"]
+        fields = ["file", "analysis_model_name"]
 
     def __init__(self, *args, process=None, **kwargs):
         super().__init__(*args, **kwargs)

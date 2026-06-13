@@ -48,6 +48,13 @@
     {% for error in form.file.errors %}<p class="error">{{ error }}</p>{% endfor %}
   </div>
 
+  <div class="field">
+    <label for="{{ form.analysis_model_name.id_for_label }}">{{ form.analysis_model_name.label }}</label>
+    {{ form.analysis_model_name }}
+    {% if form.analysis_model_name.help_text %}<p class="help">{{ form.analysis_model_name.help_text }}</p>{% endif %}
+    {% for error in form.analysis_model_name.errors %}<p class="error">{{ error }}</p>{% endfor %}
+  </div>
+
   <div class="note">
     {% trans "Obsługiwane formaty:" %} <strong>MP4, MOV</strong>. Do Gemini trafia tylko zatwierdzona wersja po anonimizacji.
   </div>

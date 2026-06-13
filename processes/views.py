@@ -20,12 +20,13 @@ from .forms import (
     ProcessVideoUploadForm,
     SegmentCorrectionForm,
 )
-from .models import Activity, Analysis, Operation, Process, Video
+from .models import Activity, Analysis, AnalysisSegment, Operation, Process, Video
 from .services import (
     analysis_summary,
     assist_activity,
     clone_operation,
     get_video_duration_seconds,
+    quantize_seconds,
     run_anonymization_in_background,
     run_analysis_in_background,
     segments_needing_review,
@@ -394,6 +395,11 @@ def video_upload(request, operation_id=None):
     return redirect("process_list")
 
 
+def _valid_video_model_name(value):
+    allowed = {choice[0] for choice in settings.GEMINI_VIDEO_MODEL_CHOICES}
+    return value if value in allowed else settings.GEMINI_VIDEO_MODEL
+
+
 def process_video_upload(request, process_id):
     process = get_object_or_404(Process.objects.prefetch_related("operations"), pk=process_id)
     form = ProcessVideoUploadForm(
@@ -405,6 +411,9 @@ def process_video_upload(request, process_id):
         video.original_filename = uploaded_file.name
         video.process = process
         video.status = Video.Status.UPLOADED
+        video.analysis_model_name = _valid_video_model_name(
+            form.cleaned_data.get("analysis_model_name")
+        )
         video.save()
         video.operations.set(form.cleaned_data["operations"])
         try:
@@ -436,7 +445,12 @@ def video_review(request, pk):
     return render(
         request,
         "processes/video_review.html",
-        {"video": video, "latest_analysis": latest_analysis},
+        {
+            "video": video,
+            "latest_analysis": latest_analysis,
+            "model_choices": settings.GEMINI_VIDEO_MODEL_CHOICES,
+            "selected_model": video.analysis_model_name or settings.GEMINI_VIDEO_MODEL,
+        },
     )
 
 
@@ -512,11 +526,17 @@ def video_approve_and_analyze(request, pk):
         messages.error(request, _("Żadna z wybranych operacji nie ma zdefiniowanych czynności."))
         return redirect("video_review", pk=video.pk)
 
+    model_name = _valid_video_model_name(request.POST.get("analysis_model_name"))
     video.status = Video.Status.ANALYZING
     video.approved_for_analysis_at = timezone.now()
-    video.save(update_fields=["status", "approved_for_analysis_at"])
+    video.analysis_model_name = model_name
+    video.save(update_fields=["status", "approved_for_analysis_at", "analysis_model_name"])
     run_analysis_in_background(video)
-    messages.info(request, _("Analiza została uruchomiona. Wynik pojawi się automatycznie."))
+    messages.info(
+        request,
+        _("Analiza została uruchomiona modelem %(model)s. Wynik pojawi się automatycznie.")
+        % {"model": model_name},
+    )
     return redirect("video_review", pk=video.pk)
 
 
@@ -729,3 +749,78 @@ def segment_update(request, analysis_pk, segment_pk):
     else:
         messages.error(request, _("Nie udało się zapisać segmentu. Sprawdź wartości czasu."))
     return redirect(reverse("analysis_detail", kwargs={"pk": analysis.pk}) + f"#segment-{segment.pk}")
+
+
+SEGMENT_MIN_LEN = Decimal("0.20")  # minimalna długość segmentu (s)
+
+
+@require_POST
+def segment_create(request, analysis_pk):
+    """Ręczne dodanie aktywności (segmentu) na osi czasu: czynność + zakres czasu."""
+    analysis = get_object_or_404(Analysis.objects.select_related("video"), pk=analysis_pk)
+    redirect_to = reverse("analysis_detail", kwargs={"pk": analysis.pk})
+
+    operations = analysis.video.analysis_operations()
+    allowed_activity_ids = {
+        a.pk for op in operations for a in op.activities.all()
+    }
+    try:
+        activity_id = int(request.POST.get("activity"))
+        start = quantize_seconds(request.POST.get("start_seconds"))
+        end = quantize_seconds(request.POST.get("end_seconds"))
+    except (TypeError, ValueError, ArithmeticError):
+        messages.error(request, _("Uzupełnij czynność oraz poprawny zakres czasu."))
+        return redirect(redirect_to)
+
+    if activity_id not in allowed_activity_ids:
+        messages.error(request, _("Wybierz czynność z listy."))
+        return redirect(redirect_to)
+    activity = Activity.objects.select_related("operation").get(pk=activity_id)
+
+    duration = analysis.video.duration_seconds
+    if start < 0 or end <= start or (end - start) < SEGMENT_MIN_LEN:
+        messages.error(request, _("Czas zakończenia musi być późniejszy niż początek."))
+        return redirect(redirect_to)
+    if duration and end > quantize_seconds(duration):
+        messages.error(request, _("Zakres wykracza poza długość nagrania."))
+        return redirect(redirect_to)
+
+    new_segment = AnalysisSegment.objects.create(
+        analysis=analysis,
+        activity=activity,
+        activity_name=activity.name,
+        operation=activity.operation,
+        operation_name=activity.operation.name,
+        start_seconds=start,
+        end_seconds=end,
+        confidence=1.0,
+        reason="",
+        is_approved=True,
+    )
+    messages.success(request, _("Aktywność dodana."))
+    return redirect(redirect_to + f"#segment-{new_segment.pk}")
+
+
+@require_POST
+def segment_delete(request, analysis_pk, segment_pk):
+    """Usuwa segment i domyka lukę: rozciąga sąsiada w tej samej operacji
+    tak, aby oś pozostała ciągła."""
+    analysis = get_object_or_404(Analysis, pk=analysis_pk)
+    segment = get_object_or_404(analysis.segments, pk=segment_pk)
+    redirect_to = reverse("analysis_detail", kwargs={"pk": analysis.pk})
+
+    same_op = analysis.segments.exclude(pk=segment.pk).filter(operation_name=segment.operation_name)
+    prev = same_op.filter(end_seconds=segment.start_seconds).first()
+    nxt = same_op.filter(start_seconds=segment.end_seconds).first()
+    if prev is not None:
+        prev.end_seconds = segment.end_seconds
+        prev.is_approved = False
+        prev.save(update_fields=["end_seconds", "is_approved", "updated_at"])
+    elif nxt is not None:
+        nxt.start_seconds = segment.start_seconds
+        nxt.is_approved = False
+        nxt.save(update_fields=["start_seconds", "is_approved", "updated_at"])
+
+    segment.delete()
+    messages.success(request, _("Segment usunięty."))
+    return redirect(redirect_to)

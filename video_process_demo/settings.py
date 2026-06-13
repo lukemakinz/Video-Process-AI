@@ -123,8 +123,39 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = int(
 )
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
-GEMINI_TEXT_MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash")
-GEMINI_VIDEO_MODEL = os.getenv("GEMINI_VIDEO_MODEL", "gemini-2.5-flash")
+GEMINI_TEXT_MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.5-flash")
+GEMINI_VIDEO_MODEL = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
+
+
+def _model_choices_env(name, default):
+    choices = []
+    for raw_item in os.getenv(name, default).split(","):
+        item = raw_item.strip()
+        if not item:
+            continue
+        value, _, label = item.partition(":")
+        value = value.strip()
+        label = label.strip() or value
+        if value and value not in {choice[0] for choice in choices}:
+            choices.append((value, label))
+    if GEMINI_VIDEO_MODEL and GEMINI_VIDEO_MODEL not in {choice[0] for choice in choices}:
+        choices.insert(0, (GEMINI_VIDEO_MODEL, f"{GEMINI_VIDEO_MODEL} (domyślny)"))
+    return choices
+
+
+GEMINI_VIDEO_MODEL_CHOICES = _model_choices_env(
+    "GEMINI_VIDEO_MODEL_CHOICES",
+    ",".join(
+        [
+            "gemini-3.5-flash:Gemini 3.5 Flash - aktualny/stabilny",
+            "gemini-3.1-pro-preview:Gemini 3.1 Pro preview - dokładniejsze rozumowanie",
+            "gemini-3-flash-preview:Gemini 3 Flash preview - starszy preview",
+            "gemini-3.1-flash-lite:Gemini 3.1 Flash-Lite - szybciej/taniej",
+            "gemini-flash-latest:Gemini Flash latest",
+            "gemini-pro-latest:Gemini Pro latest",
+        ]
+    ),
+)
 GEMINI_USE_MOCK = os.getenv("GEMINI_USE_MOCK", "false").lower() in {
     "1",
     "true",

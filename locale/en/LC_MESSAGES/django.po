@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-12 23:45+0200\n"
+"POT-Creation-Date: 2026-06-13 08:28+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -121,126 +121,127 @@ msgstr "Anonymization error"
 msgid "W kolejce do anonimizacji"
 msgstr "Queued for anonymization"
 
-#: processes/views.py:48
+#: processes/views.py:49
 msgid "Proces został utworzony."
 msgstr "Process created."
 
-#: processes/views.py:53 templates/processes/process_list.html:16
+#: processes/views.py:54 templates/processes/process_list.html:16
 #: templates/processes/process_list.html:61
 msgid "Dodaj proces"
 msgstr "Add process"
 
-#: processes/views.py:53
+#: processes/views.py:54
 msgid "Zapisz proces"
 msgstr "Save process"
 
-#: processes/views.py:103
+#: processes/views.py:104
 msgid "Proces został zaktualizowany."
 msgstr "Process updated."
 
-#: processes/views.py:108
+#: processes/views.py:109
 msgid "Edytuj proces"
 msgstr "Edit process"
 
-#: processes/views.py:108 processes/views.py:203
+#: processes/views.py:109 processes/views.py:204
 msgid "Zapisz zmiany"
 msgstr "Save changes"
 
-#: processes/views.py:116
+#: processes/views.py:117
 msgid "Proces został usunięty."
 msgstr "Process deleted."
 
-#: processes/views.py:121
+#: processes/views.py:122
 msgid "Usuń proces"
 msgstr "Delete process"
 
-#: processes/views.py:137
+#: processes/views.py:138
 #, python-format
 msgid "Zaimportowano %(count)d operacji jako duplikaty."
 msgstr "Imported %(count)d operation(s) as duplicates."
 
-#: processes/views.py:140
+#: processes/views.py:141
 msgid "Nie wybrano żadnej operacji."
 msgstr "No operation selected."
 
-#: processes/views.py:163
+#: processes/views.py:164
 msgid "Operacja została dodana."
 msgstr "Operation added."
 
-#: processes/views.py:170
+#: processes/views.py:171
+#, python-format
 msgid "Dodaj operację: %(name)s"
 msgstr "Add operation: %(name)s"
 
-#: processes/views.py:171
+#: processes/views.py:172
 msgid "Zapisz operację"
 msgstr "Save operation"
 
-#: processes/views.py:195
+#: processes/views.py:196
 msgid "Operacja została zaktualizowana."
 msgstr "Operation updated."
 
-#: processes/views.py:202
+#: processes/views.py:203
 msgid "Edytuj operację"
 msgstr "Edit operation"
 
-#: processes/views.py:215
+#: processes/views.py:216
 msgid "Operacja została usunięta."
 msgstr "Operation deleted."
 
-#: processes/views.py:220
+#: processes/views.py:221
 msgid "Usuń operację"
 msgstr "Delete operation"
 
-#: processes/views.py:281
+#: processes/views.py:282
 msgid "Wpisz nazwę czynności przed użyciem AI."
 msgstr "Enter an activity name before using AI."
 
-#: processes/views.py:290 processes/views.py:333
+#: processes/views.py:291 processes/views.py:334
 msgid "Edytuj czynność"
 msgstr "Edit activity"
 
-#: processes/views.py:290 processes/views.py:333
+#: processes/views.py:291 processes/views.py:334
 #: templates/processes/operation_detail.html:27
 #: templates/processes/operation_detail.html:38
 #: templates/processes/operation_detail.html:95
 msgid "Dodaj czynność"
 msgstr "Add activity"
 
-#: processes/views.py:312
+#: processes/views.py:313
 msgid "AI przygotowało propozycję. Zapisz ją dopiero po akceptacji."
 msgstr "AI prepared a suggestion. Save it only after review."
 
-#: processes/views.py:314
+#: processes/views.py:315
 #, python-format
 msgid "Nie udało się wygenerować opisu AI: %(error)s"
 msgstr "Could not generate AI description: %(error)s"
 
-#: processes/views.py:322
+#: processes/views.py:323
 msgid "Czynność została zapisana."
 msgstr "Activity saved."
 
-#: processes/views.py:345
+#: processes/views.py:346
 msgid "Czynność została usunięta."
 msgstr "Activity deleted."
 
-#: processes/views.py:350
+#: processes/views.py:351
 msgid "Usuń czynność"
 msgstr "Delete activity"
 
-#: processes/views.py:391
+#: processes/views.py:392
 msgid "Analizę filmu uruchom z poziomu procesu."
 msgstr "Start video analysis from the process page."
 
-#: processes/views.py:393
+#: processes/views.py:394
 msgid "Wybierz proces, dla którego chcesz przeanalizować film."
 msgstr "Select the process you want to analyze the video for."
 
-#: processes/views.py:414
+#: processes/views.py:415
 #, python-format
 msgid "Nie udało się odczytać czasu trwania przez FFmpeg: %(error)s"
 msgstr "Could not read duration via FFmpeg: %(error)s"
 
-#: processes/views.py:418
+#: processes/views.py:419
 msgid ""
 "Film został wgrany. Anonimizacja twarzy działa w tle, a status odświeży się "
 "automatycznie."
@@ -248,26 +249,24 @@ msgstr ""
 "The video has been uploaded. Face anonymization runs in the background and "
 "the status will refresh automatically."
 
-#: processes/views.py:449
+#: processes/views.py:450
 msgid "Ponowną anonimizację uruchom przyciskiem na stronie podglądu."
 msgstr "Re-run anonymization using the button on the preview page."
 
-#: processes/views.py:452
+#: processes/views.py:453
 msgid "Nie można ponowić anonimizacji w trakcie analizy."
 msgstr "Cannot re-run anonymization during analysis."
 
-#: processes/views.py:455
+#: processes/views.py:456
 msgid "Brakuje oryginalnego pliku wideo."
 msgstr "Original video file is missing."
 
-#: processes/views.py:459
-#, fuzzy
-#| msgid "Analiza została uruchomiona. Wynik pojawi się automatycznie."
+#: processes/views.py:460
 msgid ""
 "Ponowna anonimizacja została uruchomiona. Status odświeży się automatycznie."
-msgstr "Analysis started. The result will appear automatically."
+msgstr "Re-anonymization started. The status will refresh automatically."
 
-#: processes/views.py:479
+#: processes/views.py:480
 msgid ""
 "Anonimizacja została przerwana albo worker nie aktualizuje postępu od ponad "
 "5 minut. Uruchom ponownie z oryginału."
@@ -275,31 +274,60 @@ msgstr ""
 "Anonymization was interrupted or the worker has not updated progress for "
 "over 5 minutes. Re-run it from the original."
 
-#: processes/views.py:481
+#: processes/views.py:482
 msgid "Przerwano anonimizację"
 msgstr "Anonymization interrupted"
 
-#: processes/views.py:508
+#: processes/views.py:509
 msgid "Brakuje pliku po anonimizacji. Analiza została zablokowana."
 msgstr "Anonymized file is missing. Analysis was blocked."
 
-#: processes/views.py:512
+#: processes/views.py:513
 msgid "Żadna z wybranych operacji nie ma zdefiniowanych czynności."
 msgstr "None of the selected operations has defined activities."
 
-#: processes/views.py:519
+#: processes/views.py:520
 msgid "Analiza została uruchomiona. Wynik pojawi się automatycznie."
 msgstr "Analysis started. The result will appear automatically."
 
-#: processes/views.py:728
+#: processes/views.py:537
+#, python-format
+msgid "Analiza została uruchomiona modelem %(model)s. Wynik pojawi się automatycznie."
+msgstr "Analysis started with %(model)s. The result will appear automatically."
+
+#: processes/views.py:729
 msgid "Segment został zaktualizowany."
 msgstr "Segment updated."
 
-#: processes/views.py:730
+#: processes/views.py:731
 msgid "Nie udało się zapisać segmentu. Sprawdź wartości czasu."
 msgstr "Could not save the segment. Check the time values."
 
-#: templates/base.html:165 templates/processes/operation_detail.html:8
+#: processes/views.py:753
+msgid "Uzupełnij czynność oraz poprawny zakres czasu."
+msgstr "Provide an activity and a valid time range."
+
+#: processes/views.py:757
+msgid "Wybierz czynność z listy."
+msgstr "Choose an activity from the list."
+
+#: processes/views.py:763
+msgid "Czas zakończenia musi być późniejszy niż początek."
+msgstr "End time must be later than the start."
+
+#: processes/views.py:766
+msgid "Zakres wykracza poza długość nagrania."
+msgstr "The range exceeds the recording length."
+
+#: processes/views.py:781
+msgid "Aktywność dodana."
+msgstr "Activity added."
+
+#: processes/views.py:806
+msgid "Segment usunięty."
+msgstr "Segment deleted."
+
+#: templates/base.html:170 templates/processes/operation_detail.html:8
 #: templates/processes/operation_import.html:8
 #: templates/processes/process_detail.html:8
 #: templates/processes/process_list.html:5
@@ -309,11 +337,11 @@ msgstr "Could not save the segment. Check the time values."
 msgid "Procesy"
 msgstr "Processes"
 
-#: templates/base.html:169
+#: templates/base.html:174
 msgid "Admin"
 msgstr "Admin"
 
-#: templates/base.html:233
+#: templates/base.html:238
 msgid "Wykonanie"
 msgstr "Made by"
 
@@ -343,37 +371,37 @@ msgstr ""
 "The result will appear here automatically. You can keep this page open.The "
 "result will appear here automatically. You can keep this page open."
 
-#: templates/processes/_anonymization_status.html:12
+#: templates/processes/_anonymization_status.html:11
 msgid "Anonimizacja w toku"
 msgstr "Anonymization in progress"
 
-#: templates/processes/_anonymization_status.html:21
+#: templates/processes/_anonymization_status.html:20
 #, python-format
 msgid "%(current)s/%(total)s klatek"
 msgstr "%(current)s/%(total)s frames"
 
-#: templates/processes/_anonymization_status.html:26
+#: templates/processes/_anonymization_status.html:25
 msgid "Ostatni postęp:"
 msgstr "Last update:"
 
-#: templates/processes/_anonymization_status.html:31
+#: templates/processes/_anonymization_status.html:30
 msgid "Uruchom ponownie z oryginału"
 msgstr "Re-run from original"
 
-#: templates/processes/_anonymization_status.html:38
+#: templates/processes/_anonymization_status.html:37
 msgid "Anonimizacja nie powiodła się"
 msgstr "Anonymization failed"
 
-#: templates/processes/_anonymization_status.html:43
+#: templates/processes/_anonymization_status.html:42
 #: templates/processes/video_review.html:40
 msgid "Ponów anonimizację z oryginału"
 msgstr "Re-run anonymization from original"
 
-#: templates/processes/_anonymization_status.html:49
+#: templates/processes/_anonymization_status.html:48
 msgid "Anonimizacja zakończona"
 msgstr "Anonymization complete"
 
-#: templates/processes/_anonymization_status.html:50
+#: templates/processes/_anonymization_status.html:49
 msgid "Odświeżamy podgląd z nowym plikiem."
 msgstr "Refreshing the preview with the new file."
 
@@ -394,6 +422,7 @@ msgid "Poprzednia"
 msgstr "Previous"
 
 #: templates/processes/_pagination.html:12
+#, python-format
 msgid "Strona %(current)s z %(total)s"
 msgstr "Page %(current)s of %(total)s"
 
@@ -415,7 +444,7 @@ msgid "Potwierdź segment"
 msgstr "Confirm segment"
 
 #: templates/processes/_segment_feedback.html:20
-#: templates/processes/analysis_detail.html:219
+#: templates/processes/analysis_detail.html:282
 msgid "Popraw segment"
 msgstr "Edit segment"
 
@@ -484,6 +513,7 @@ msgid "Zapisz czynność"
 msgstr "Save activity"
 
 #: templates/processes/activity_form.html:115
+#: templates/processes/analysis_detail.html:228
 #: templates/processes/confirm_delete.html:25 templates/processes/form.html:30
 #: templates/processes/operation_import.html:50
 #: templates/processes/process_video_upload.html:60
@@ -519,6 +549,23 @@ msgstr "estimate"
 msgid "Uruchom analizę ponownie"
 msgstr "Run the analysis again"
 
+#: processes/forms.py:116 templates/processes/video_review.html:54
+#: templates/processes/video_review.html:71
+msgid "Model analizy"
+msgstr "Analysis model"
+
+#: processes/forms.py:119
+msgid ""
+"Flash jest szybszy i tańszy. Pro zwykle lepiej radzi sobie z trudniejszą "
+"interpretacją wideo."
+msgstr ""
+"Flash is faster and cheaper. Pro usually handles harder video interpretation "
+"better."
+
+#: templates/processes/video_review.html:63
+msgid "Uruchom nową analizę"
+msgstr "Run a new analysis"
+
 #: templates/processes/analysis_detail.html:83
 msgid "Chodzenie"
 msgstr "Walking"
@@ -535,35 +582,31 @@ msgstr "Uncertain"
 msgid "Wideo po anonimizacji"
 msgstr "Anonymized video"
 
-#: templates/processes/analysis_detail.html:105
-msgid "Prompt wysłany do Gemini"
-msgstr "Prompt sent to Gemini"
-
-#: templates/processes/analysis_detail.html:114
+#: templates/processes/analysis_detail.html:117
 msgid "Szczegóły analizy"
 msgstr "Analysis details"
 
-#: templates/processes/analysis_detail.html:116
+#: templates/processes/analysis_detail.html:119
 msgid "Model"
 msgstr "Model"
 
-#: templates/processes/analysis_detail.html:118
+#: templates/processes/analysis_detail.html:121
 msgid "Tokeny wejściowe"
 msgstr "Input tokens"
 
-#: templates/processes/analysis_detail.html:119
+#: templates/processes/analysis_detail.html:122
 msgid "Tokeny wyjściowe"
 msgstr "Output tokens"
 
-#: templates/processes/analysis_detail.html:123
+#: templates/processes/analysis_detail.html:126
 msgid "Segmentów"
 msgstr "Segments"
 
-#: templates/processes/analysis_detail.html:124
+#: templates/processes/analysis_detail.html:127
 msgid "Zatwierdzone"
 msgstr "Approved"
 
-#: templates/processes/analysis_detail.html:127
+#: templates/processes/analysis_detail.html:130
 msgid ""
 "Koszt szacowany na podstawie długości wideo i cennika z ustawień — nie "
 "pochodzi z realnego rozliczenia API."
@@ -571,54 +614,88 @@ msgstr ""
 "Cost estimated from video length and the pricing in settings — not from real "
 "API billing."
 
-#: templates/processes/analysis_detail.html:137
+#: templates/processes/analysis_detail.html:140
 msgid "Oś czasu czynności"
 msgstr "Activity timeline"
 
-#: templates/processes/analysis_detail.html:138
+#: templates/processes/analysis_detail.html:141
 msgid "Kliknij segment, aby przeskoczyć do tego momentu w nagraniu."
 msgstr "Click a segment to jump to that point in the recording."
 
-#: templates/processes/analysis_detail.html:145
+#: templates/processes/analysis_detail.html:148
 msgid "Operacje:"
 msgstr "Operations:"
 
-#: templates/processes/analysis_detail.html:182
+#: templates/processes/analysis_detail.html:161
+#: templates/processes/analysis_detail.html:201
+msgid "Dodaj aktywność"
+msgstr "Add activity"
+
+#: templates/processes/analysis_detail.html:163
+msgid "Czas segmentów skrócisz lub wydłużysz w „Popraw segment” pod listą."
+msgstr "Shorten or extend segment times in “Edit segment” below the list."
+
+#: templates/processes/analysis_detail.html:175
+msgid "Przejdź do startu czynności"
+msgstr "Go to activity start"
+
+#: templates/processes/analysis_detail.html:202
+msgid "Zamknij"
+msgstr "Close"
+
+#: templates/processes/analysis_detail.html:207
+#: templates/processes/analysis_detail.html:246
+msgid "Czynność"
+msgstr "Activity"
+
+#: templates/processes/analysis_detail.html:209
+msgid "— wybierz —"
+msgstr "— choose —"
+
+#: templates/processes/analysis_detail.html:219
+msgid "Od (s)"
+msgstr "From (s)"
+
+#: templates/processes/analysis_detail.html:223
+msgid "Do (s)"
+msgstr "To (s)"
+
+#: templates/processes/analysis_detail.html:229
+msgid "Dodaj"
+msgstr "Add"
+
+#: templates/processes/analysis_detail.html:237
 msgid "Lista segmentów"
 msgstr "Segment list"
 
-#: templates/processes/analysis_detail.html:187
+#: templates/processes/analysis_detail.html:242
 msgid "Od"
 msgstr "From"
 
-#: templates/processes/analysis_detail.html:188
+#: templates/processes/analysis_detail.html:243
 msgid "Do"
 msgstr "To"
 
-#: templates/processes/analysis_detail.html:189
+#: templates/processes/analysis_detail.html:244
 #: templates/processes/operation_detail.html:111
 #: templates/processes/process_videos.html:44
 msgid "Czas"
 msgstr "Duration"
 
-#: templates/processes/analysis_detail.html:190
+#: templates/processes/analysis_detail.html:245
 #: templates/processes/operation_import.html:31
 msgid "Operacja"
 msgstr "Operation"
 
-#: templates/processes/analysis_detail.html:191
-msgid "Czynność"
-msgstr "Activity"
-
-#: templates/processes/analysis_detail.html:192
+#: templates/processes/analysis_detail.html:247
 msgid "Pewność"
 msgstr "Confidence"
 
-#: templates/processes/analysis_detail.html:193
+#: templates/processes/analysis_detail.html:248
 msgid "Uzasadnienie"
 msgstr "Reason"
 
-#: templates/processes/analysis_detail.html:194
+#: templates/processes/analysis_detail.html:249
 #: templates/processes/operation_detail.html:60
 #: templates/processes/operation_detail.html:113
 #: templates/processes/process_detail.html:56
@@ -626,11 +703,20 @@ msgstr "Reason"
 msgid "Akcje"
 msgstr "Actions"
 
-#: templates/processes/analysis_detail.html:230
+#: templates/processes/analysis_detail.html:267
+msgid "Usunąć ten segment? Sąsiedni zostanie rozciągnięty, by domknąć lukę."
+msgstr ""
+"Delete this segment? The adjacent one will be extended to close the gap."
+
+#: templates/processes/analysis_detail.html:269
+msgid "Usuń segment"
+msgstr "Delete segment"
+
+#: templates/processes/analysis_detail.html:293
 msgid "Zapisz korektę"
 msgstr "Save correction"
 
-#: templates/processes/analysis_detail.html:244
+#: templates/processes/analysis_detail.html:307
 msgid "Czasy czynności"
 msgstr "Activity times"
 
@@ -870,7 +956,7 @@ msgstr "Anonymization preview"
 
 #: templates/processes/video_review.html:35
 msgid "Do Gemini zostanie wysłany"
-msgstr "Only this anonymized file will be sent to Gemini"
+msgstr "Sent to Gemini:"
 
 #: templates/processes/video_review.html:35
 msgid "wyłącznie ten zanonimizowany plik"
@@ -905,6 +991,45 @@ msgid ""
 msgstr ""
 "After upload the app creates a face-anonymized version. Gemini analysis "
 "starts only after preview and approval."
+
+#~ msgid "Nieprawidłowy moment podziału."
+#~ msgstr "Invalid split point."
+
+#~ msgid "Ustaw odtwarzacz wewnątrz segmentu, który chcesz podzielić."
+#~ msgstr "Position the player inside the segment you want to split."
+
+#~ msgid "Moment podziału jest zbyt blisko krawędzi segmentu."
+#~ msgstr "The split point is too close to the segment edge."
+
+#~ msgid "Segment podzielony. Nadaj właściwą czynność nowemu fragmentowi."
+#~ msgstr "Segment split. Assign the correct activity to the new piece."
+
+#~ msgid "Nieprawidłowy moment granicy."
+#~ msgstr "Invalid boundary point."
+
+#~ msgid "Nie znaleziono granicy do przesunięcia."
+#~ msgstr "No boundary found to move."
+
+#~ msgid "Nie można przesunąć granicy tak blisko sąsiedniego segmentu."
+#~ msgstr "Cannot move the boundary that close to an adjacent segment."
+
+#~ msgid "Granica segmentu przesunięta."
+#~ msgstr "Segment boundary moved."
+
+#~ msgid "Zaznacz segment i ustaw odtwarzacz w miejscu cięcia"
+#~ msgstr "Select a segment and position the player at the cut point"
+
+#~ msgid "Podziel w bieżącej sekundzie"
+#~ msgstr "Split at current second"
+
+#~ msgid "Przeciągnij, aby przesunąć granicę"
+#~ msgstr "Drag to move the boundary"
+
+#~ msgid "Prompt wysłany do Gemini"
+#~ msgstr "Prompt sent to Gemini"
+
+#~ msgid "Kliknij segment, przewiń wideo do miejsca cięcia, potem podziel."
+#~ msgstr "Click a segment, scrub the video to the cut point, then split."
 
 #~ msgid "Zatwierdź i rozpocznij analizę Gemini"
 #~ msgstr "Approve and start Gemini analysis"

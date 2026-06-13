@@ -174,6 +174,11 @@ class Video(models.Model):
         null=True,
         blank=True,
     )
+    analysis_model_name = models.CharField(
+        "model analizy Gemini",
+        max_length=120,
+        blank=True,
+    )
     created_at = models.DateTimeField("utworzono", auto_now_add=True)
 
     class Meta:

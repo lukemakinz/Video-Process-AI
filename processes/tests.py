@@ -60,6 +60,155 @@ class ProcessDemoTests(TestCase):
         self.assertIn("90.47", multi)
         self.assertIn("SEKUNDACH DZIESIĘTNYCH", multi)
 
+    def test_prompt_demands_evidence_alternatives_and_uncertain_activity(self):
+        prompt = build_analysis_prompt(self.operation)
+        self.assertIn('"alternative_activity"', prompt)
+        self.assertIn('"evidence"', prompt)
+        self.assertIn('"missing_evidence"', prompt)
+        self.assertIn('activity":"nazwa czynności albo niepewne"', prompt)
+        self.assertIn("nie używaj stałej wartości confidence", prompt)
+        self.assertIn("nie scalaj kilku odrębnych wystąpień", prompt)
+        self.assertIn("za krótkie, żeby było znaczące", prompt)
+        self.assertIn("przeplot A/B/A", prompt)
+        self.assertIn("stabilne, widoczne sygnały innej zdefiniowanej czynności", prompt)
+        self.assertIn('"box_2d"', prompt)
+
+    def test_prompt_adds_pairwise_confusion_rules_from_feedback(self):
+        from processes.models import ActivityHint
+
+        ActivityHint.objects.create(
+            activity=self.load,
+            confused_with=self.machine,
+            text="small setup movements still mean loading, not machine work",
+        )
+        prompt = build_analysis_prompt(self.operation)
+        self.assertIn("Reguły rozróżniania często mylonych czynności", prompt)
+        self.assertIn('między "załadunek detalu" i "praca maszyny"', prompt)
+        self.assertIn("small setup movements", prompt)
+
+    def test_extract_json_recovers_segments_from_box2d_wrapper(self):
+        from processes.services import _extract_json
+
+        raw = """
+```json
+[
+  {"box_2d": [
+    {"start_seconds": 0, "end_seconds": 1, "activity": "załadunek detalu", "confidence": 0.8}
+  ]
+]
+```
+"""
+        payload = _extract_json(raw)
+
+        self.assertEqual(len(payload["segments"]), 1)
+        self.assertEqual(payload["segments"][0]["activity"], "załadunek detalu")
+
+    def test_normalize_calibrates_repeated_high_confidence_and_short_flaps(self):
+        from processes.services import _normalize_segments
+
+        payload = {
+            "segments": [
+                {
+                    "start_seconds": 0,
+                    "end_seconds": 3,
+                    "activity": self.load.name,
+                    "confidence": 0.95,
+                    "reason": "loading",
+                },
+                {
+                    "start_seconds": 3,
+                    "end_seconds": 4,
+                    "activity": self.machine.name,
+                    "confidence": 0.95,
+                    "reason": "brief machine-like motion",
+                },
+                {
+                    "start_seconds": 4,
+                    "end_seconds": 7,
+                    "activity": self.load.name,
+                    "confidence": 0.95,
+                    "reason": "loading again",
+                },
+                {
+                    "start_seconds": 7,
+                    "end_seconds": 10,
+                    "activity": self.machine.name,
+                    "confidence": 0.95,
+                    "reason": "machine work",
+                },
+            ]
+        }
+
+        segments = _normalize_segments(payload, self.operation, duration_seconds=Decimal("10"))
+
+        self.assertTrue(all(segment["confidence"] < 0.95 for segment in segments))
+        self.assertEqual(segments[1]["activity"], self.machine)
+        self.assertLessEqual(segments[1]["confidence"], 0.58)
+        self.assertIn("Kalibracja", segments[0]["reason"])
+        self.assertIn("Kontrola czasowa", segments[1]["reason"])
+
+    def test_normalize_lowers_confidence_when_alternative_or_missing_evidence_exists(self):
+        from processes.services import _normalize_segments
+
+        payload = {
+            "segments": [
+                {
+                    "start_seconds": 0,
+                    "end_seconds": 6,
+                    "activity": self.load.name,
+                    "confidence": 0.95,
+                    "alternative_activity": self.machine.name,
+                    "evidence": ["hands are near the part"],
+                    "missing_evidence": ["the part placement is partly hidden"],
+                    "reason": "could be loading",
+                    "confidence_reason": "ambiguous with machine setup",
+                }
+            ]
+        }
+
+        segment = _normalize_segments(payload, self.operation)[0]
+
+        self.assertLessEqual(segment["confidence"], 0.64)
+        self.assertIn("Dowody: hands are near the part", segment["reason"])
+        self.assertIn("Brakujące dowody", segment["reason"])
+        self.assertIn("Alternatywa: praca maszyny", segment["reason"])
+
+    def test_unknown_activity_becomes_system_uncertain(self):
+        from processes.services import _normalize_segments
+
+        payload = {
+            "segments": [
+                {
+                    "start_seconds": 0,
+                    "end_seconds": 4,
+                    "activity": "not a defined activity",
+                    "confidence": 0.91,
+                    "reason": "unclear movement",
+                }
+            ]
+        }
+
+        segment = _normalize_segments(payload, self.operation)[0]
+
+        self.assertIsNone(segment["activity"])
+        self.assertEqual(segment["activity_name"], "niepewne")
+        self.assertLessEqual(segment["confidence"], 0.45)
+
+    def test_extract_json_accepts_top_level_segment_array(self):
+        from processes.services import _extract_json
+
+        payload = _extract_json(
+            """```json
+[
+  {"start_seconds": 0, "end_seconds": 1, "activity": "x", "confidence": 0.5}
+]
+```"""
+        )
+
+        self.assertIn("segments", payload)
+        self.assertEqual(len(payload["segments"]), 1)
+        self.assertEqual(payload["segments"][0]["activity"], "x")
+
     def test_upload_form_rejects_unsupported_format(self):
         upload = SimpleUploadedFile("film.avi", b"demo", content_type="video/avi")
         form = VideoUploadForm(data={"operation": self.operation.pk}, files={"file": upload})
@@ -123,7 +272,8 @@ class ProcessDemoTests(TestCase):
             video.refresh_from_db()
             self.assertEqual(video.status, Video.Status.AWAITING_APPROVAL)
             self.assertIsNone(video.approved_for_analysis_at)
-            self.assertIn("yunet_face_blur (4", video.anonymization_error)
+            self.assertIn("Rozmyto 4 wykrytych wystąpień twarzy", video.anonymization_error)
+            self.assertNotIn("yunet_face_blur", video.anonymization_error)
             with video.anonymized_file.open("rb") as handle:
                 self.assertEqual(handle.read(), b"face-mask-output")
 
@@ -195,6 +345,81 @@ class ProcessDemoTests(TestCase):
         self.assertEqual(bars[0]["end_seconds"], Decimal("10"))
         self.assertEqual(bars[0]["left"], "0.0000%")
         self.assertEqual(bars[0]["width"], "100.0000%")
+
+    def _single_segment_analysis(self, start="0", end="10"):
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("10.00"),
+        )
+        analysis = Analysis.objects.create(video=video, status=Analysis.Status.COMPLETED)
+        seg = AnalysisSegment.objects.create(
+            analysis=analysis,
+            activity=self.load,
+            activity_name=self.load.name,
+            start_seconds=Decimal(start),
+            end_seconds=Decimal(end),
+            confidence=0.8,
+        )
+        return analysis, seg
+
+    def test_segment_create_adds_activity(self):
+        analysis, seg = self._single_segment_analysis("0", "10")
+        r = self.client.post(
+            f"/analyses/{analysis.pk}/segments/create/",
+            {"activity": self.machine.pk, "start_seconds": "3.0", "end_seconds": "6.0"},
+        )
+        self.assertEqual(r.status_code, 302)
+        new = analysis.segments.get(start_seconds=Decimal("3.00"))
+        self.assertEqual(new.end_seconds, Decimal("6.00"))
+        self.assertEqual(new.activity, self.machine)
+        self.assertEqual(new.operation, self.operation)
+        self.assertEqual(new.activity_name, self.machine.name)
+        self.assertTrue(new.is_approved)
+
+    def test_segment_create_rejects_bad_range(self):
+        analysis, seg = self._single_segment_analysis("0", "10")
+        r = self.client.post(
+            f"/analyses/{analysis.pk}/segments/create/",
+            {"activity": self.machine.pk, "start_seconds": "6.0", "end_seconds": "3.0"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(analysis.segments.count(), 1)
+
+    def test_segment_create_rejects_unknown_activity(self):
+        analysis, seg = self._single_segment_analysis("0", "10")
+        r = self.client.post(
+            f"/analyses/{analysis.pk}/segments/create/",
+            {"activity": "99999", "start_seconds": "1.0", "end_seconds": "2.0"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(analysis.segments.count(), 1)
+
+    def _two_segment_analysis(self):
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("20.00"),
+        )
+        analysis = Analysis.objects.create(video=video, status=Analysis.Status.COMPLETED)
+        a = AnalysisSegment.objects.create(
+            analysis=analysis, activity=self.load, activity_name=self.load.name,
+            start_seconds=Decimal("0"), end_seconds=Decimal("10"), confidence=0.8,
+        )
+        b = AnalysisSegment.objects.create(
+            analysis=analysis, activity=self.machine, activity_name=self.machine.name,
+            start_seconds=Decimal("10"), end_seconds=Decimal("20"), confidence=0.8,
+        )
+        return analysis, a, b
+
+    def test_segment_delete_closes_gap_by_extending_previous(self):
+        analysis, a, b = self._two_segment_analysis()
+        r = self.client.post(f"/analyses/{analysis.pk}/segments/{b.pk}/delete/")
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(analysis.segments.filter(pk=b.pk).exists())
+        a.refresh_from_db()
+        # poprzedni rozciągnięty, by domknąć lukę
+        self.assertEqual(a.end_seconds, Decimal("20.00"))
 
     # --- Historia analiz wideo (paginacja) ---
 
@@ -357,11 +582,15 @@ class ProcessDemoTests(TestCase):
             anonymized_file=SimpleUploadedFile("a.mp4", b"x"),
         )
         with patch("processes.views.run_analysis_in_background") as bg:
-            r = self.client.post(f"/videos/{video.pk}/approve-and-analyze/")
+            r = self.client.post(
+                f"/videos/{video.pk}/approve-and-analyze/",
+                {"analysis_model_name": "gemini-3.1-pro-preview"},
+            )
             bg.assert_called_once()
         video.refresh_from_db()
         self.assertEqual(video.status, Video.Status.ANALYZING)
         self.assertIsNotNone(video.approved_for_analysis_at)
+        self.assertEqual(video.analysis_model_name, "gemini-3.1-pro-preview")
         self.assertRedirects(r, f"/videos/{video.pk}/review/")
 
     def test_video_reanonymize_starts_background_and_shows_polling(self):
@@ -453,6 +682,57 @@ class ProcessDemoTests(TestCase):
         body = response.content.decode()
         self.assertNotIn("Do zatwierdzenia", body)
         self.assertIn("Analiza AI", body)
+
+    def test_video_review_completed_allows_rerun_with_model_choice(self):
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("12.00"),
+            status=Video.Status.COMPLETED,
+            anonymized_file=SimpleUploadedFile("a.mp4", b"x"),
+            analysis_model_name="gemini-3.1-pro-preview",
+        )
+        Analysis.objects.create(video=video, status=Analysis.Status.COMPLETED)
+
+        response = self.client.get(f"/videos/{video.pk}/review/")
+        body = response.content.decode()
+
+        self.assertIn("Uruchom nową analizę", body)
+        self.assertIn('name="analysis_model_name"', body)
+        self.assertIn('value="gemini-3.1-pro-preview" selected', body)
+        self.assertIn('value="gemini-3.5-flash"', body)
+        self.assertNotIn('value="gemini-2.5-flash"', body)
+        self.assertNotIn('value="gemini-2.5-pro"', body)
+
+    @override_settings(
+        GEMINI_USE_MOCK=False,
+        GEMINI_API_KEY="real-key-in-test",
+        GEMINI_FALLBACK_TO_MOCK=True,
+    )
+    def test_real_gemini_parse_error_does_not_silently_use_demo_segments(self):
+        from processes.services import run_video_analysis
+
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("12.00"),
+            anonymized_file=SimpleUploadedFile("a.mp4", b"x"),
+            approved_for_analysis_at=timezone.now(),
+        )
+
+        with patch(
+            "processes.services._analyze_with_gemini",
+            return_value=("not json", {"input_tokens": 1, "output_tokens": 1}),
+        ):
+            analysis = run_video_analysis(video)
+
+        analysis.refresh_from_db()
+        video.refresh_from_db()
+        self.assertEqual(analysis.status, Analysis.Status.FAILED)
+        self.assertEqual(video.status, Video.Status.FAILED)
+        self.assertEqual(analysis.segments.count(), 0)
+        self.assertEqual(analysis.raw_response, "not json")
+        self.assertNotIn("Segment demo", analysis.raw_response)
 
     # --- Etap 2: asystent AI (OpenAI) ---
 
@@ -827,13 +1107,18 @@ class ProcessDemoTests(TestCase):
         ):
             r = self.client.post(
                 f"/processes/{self.process.pk}/analyze-video/",
-                {"operations": [self.operation.pk, op2.pk], "file": upload},
+                {
+                    "operations": [self.operation.pk, op2.pk],
+                    "file": upload,
+                    "analysis_model_name": "gemini-3.1-pro-preview",
+                },
             )
         self.assertEqual(r.status_code, 302)
         anonymize.assert_called_once()
         video = Video.objects.filter(original_filename="clip.mp4").first()
         self.assertIsNotNone(video)
         self.assertEqual(video.process, self.process)
+        self.assertEqual(video.analysis_model_name, "gemini-3.1-pro-preview")
         self.assertEqual(
             set(video.operations.values_list("pk", flat=True)),
             {self.operation.pk, op2.pk},
@@ -859,6 +1144,41 @@ class ProcessDemoTests(TestCase):
         frez0 = analysis.segments.filter(operation=self.operation).order_by("start_seconds").first()
         mal0 = analysis.segments.filter(operation=op2).order_by("start_seconds").first()
         self.assertEqual(frez0.start_seconds, mal0.start_seconds)
+
+    @override_settings(
+        GEMINI_USE_MOCK=False,
+        GEMINI_API_KEY="real-key-in-test",
+        GEMINI_FALLBACK_TO_MOCK=False,
+    )
+    def test_run_video_analysis_uses_model_selected_on_video(self):
+        from processes.services import run_video_analysis
+
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="model.mp4",
+            duration_seconds=Decimal("12.00"),
+            approved_for_analysis_at=timezone.now(),
+            anonymized_file=SimpleUploadedFile("a.mp4", b"x"),
+            analysis_model_name="gemini-3.1-pro-preview",
+        )
+        raw = (
+            '{"segments":[{"start_seconds":0,"end_seconds":12,'
+            f'"activity":"{self.load.name}","confidence":0.9,'
+            '"evidence":["operator loads part"],"missing_evidence":[],'
+            '"alternative_activity":null,"reason":"visible loading",'
+            '"confidence_reason":"clear evidence"}]}'
+        )
+
+        with patch(
+            "processes.services._analyze_with_gemini",
+            return_value=(raw, {"input_tokens": 10, "output_tokens": 5}),
+        ) as analyze:
+            analysis = run_video_analysis(video)
+
+        self.assertEqual(analysis.status, Analysis.Status.COMPLETED)
+        self.assertEqual(analysis.model_name, "gemini-3.1-pro-preview")
+        analyze.assert_called_once()
+        self.assertEqual(analyze.call_args.kwargs["model_name"], "gemini-3.1-pro-preview")
 
     def test_multi_operation_prompt_structure(self):
         from processes.services import build_multi_operation_prompt

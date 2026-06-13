@@ -102,6 +102,16 @@ urlpatterns = [
         views.segment_feedback,
         name="segment_feedback",
     ),
+    path(
+        "analyses/<int:analysis_pk>/segments/create/",
+        views.segment_create,
+        name="segment_create",
+    ),
+    path(
+        "analyses/<int:analysis_pk>/segments/<int:segment_pk>/delete/",
+        views.segment_delete,
+        name="segment_delete",
+    ),
     path("hints/<int:pk>/toggle/", views.hint_toggle, name="hint_toggle"),
     path("hints/<int:pk>/delete/", views.hint_delete, name="hint_delete"),
 ]

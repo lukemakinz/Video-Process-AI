@@ -100,10 +100,12 @@
       {% if analysis.video.anonymized_file %}
         <video id="analysis-video" class="w-full rounded-lg border border-slate-200 bg-black aspect-video" controls src="{{ analysis.video.anonymized_file.url }}"></video>
       {% endif %}
+      {% comment %}Prompt wysłany do Gemini — ukryty na życzenie. Odkomentuj, by przywrócić podgląd.
       <details class="mt-4 group">
         <summary class="cursor-pointer text-sm font-medium text-slate-600 hover:text-primary select-none">{% trans "Prompt wysłany do Gemini" %}</summary>
         <pre class="mt-2 rounded-lg bg-slate-900 text-slate-100 text-xs font-mono p-4 overflow-x-auto whitespace-pre-wrap">{{ analysis.prompt }}</pre>
       </details>
+      {% endcomment %}
     </section>
   </div>
 
@@ -136,7 +138,13 @@
       <h2>{% trans "Oś czasu czynności" %}</h2>
       <p class="muted text-sm mt-1">{% trans "Kliknij segment, aby przeskoczyć do tego momentu w nagraniu." %}</p>
     </div>
-    <span class="pill">{{ analysis.segments.count }} wykrytych</span>
+    <div class="flex items-center gap-3 shrink-0">
+      <span class="pill">{{ analysis.segments.count }} wykrytych</span>
+      <button type="button" class="btn primary small inline-flex items-center gap-1.5" onclick="openAddActivity()">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        {% trans "Dodaj aktywność" %}
+      </button>
+    </div>
   </div>
 
   {% if summary.operations_legend %}
@@ -151,34 +159,78 @@
     </div>
   {% endif %}
 
+  <div class="mb-3">
+    <span class="text-xs text-slate-400">{% trans "Czas segmentów skrócisz lub wydłużysz w „Popraw segment” pod listą." %}</span>
+  </div>
+
   <div class="gantt" data-duration="{{ summary.timeline_duration|js_number }}">
     <div class="gantt-scale">
       <span>00:00</span>
       <span>{{ summary.timeline_duration|seconds_time }}</span>
     </div>
+    <div class="gantt-rows relative">
     {% for row in summary.gantt_rows %}
       <div class="gantt-row">
         <div class="gantt-label cursor-pointer" role="button" tabindex="0"
              title="{% trans 'Przejdź do startu czynności' %}"
-             onclick="seekTo({{ row.first_start|js_number }})"
-             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();seekTo({{ row.first_start|js_number }})}">
+             onclick="seekOnly({{ row.first_start|js_number }})"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();seekOnly({{ row.first_start|js_number }})}">
           <strong>{{ row.name }}</strong>
           <span>{% if summary.is_multi_operation %}{{ row.operation_name }} · {% endif %}{{ row.duration|seconds_label }}</span>
         </div>
         <div class="gantt-track">
           {% for bar in row.bars %}
-            <button type="button" class="gantt-bar" data-start="{{ bar.start_seconds|js_number }}" data-end="{{ bar.end_seconds|js_number }}" data-segment="{{ bar.id }}" style="left: {{ bar.left }}; width: {{ bar.width }}; background-color: {{ bar.color }};"
-              onclick="focusActivity(this)"
+            <button type="button" class="gantt-bar" data-start="{{ bar.start_seconds|js_number }}" data-end="{{ bar.end_seconds|js_number }}" data-segment="{{ bar.id }}" data-op="{{ row.operation_name }}" style="left: {{ bar.left }}; width: {{ bar.width }}; background-color: {{ bar.color }};"
+              onclick="focusActivity(this, event)"
               title="{{ row.operation_name }} / {{ row.name }}: {{ bar.start_seconds|seconds_time }}-{{ bar.end_seconds|seconds_time }} / pewność {{ bar.confidence|confidence_percent }}">
               <span>{{ bar.start_seconds|seconds_time }}–{{ bar.end_seconds|seconds_time }}</span>
             </button>
           {% endfor %}
-          <div class="gantt-playhead" aria-hidden="true" style="left: 0;"></div>
         </div>
       </div>
     {% endfor %}
+      <div class="gantt-playhead" id="gantt-playhead" aria-hidden="true"></div>
+    </div>
   </div>
 </section>
+
+<!-- modal: dodaj aktywność -->
+<div id="add-activity-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" onclick="if(event.target===this)closeAddActivity()">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-5" role="dialog" aria-modal="true" aria-labelledby="add-activity-title">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="add-activity-title" class="font-semibold text-slate-900">{% trans "Dodaj aktywność" %}</h3>
+      <button type="button" class="text-slate-400 hover:text-slate-700 text-lg leading-none" onclick="closeAddActivity()" aria-label="{% trans 'Zamknij' %}">✕</button>
+    </div>
+    <form method="post" action="{% url 'segment_create' analysis.pk %}" class="flex flex-col gap-3">
+      {% csrf_token %}
+      <div class="field">
+        <label for="add-activity-select">{% trans "Czynność" %}</label>
+        <select name="activity" id="add-activity-select" class="select" required>
+          <option value="">{% trans "— wybierz —" %}</option>
+          {% for op in operations %}
+            {% for act in op.activities.all %}
+              <option value="{{ act.pk }}">{% if summary.is_multi_operation %}{{ op.name }} / {% endif %}{{ act.name }}</option>
+            {% endfor %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="field">
+          <label for="add-start">{% trans "Od (s)" %}</label>
+          <input type="number" step="0.1" min="0" name="start_seconds" id="add-start" class="input" required>
+        </div>
+        <div class="field">
+          <label for="add-end">{% trans "Do (s)" %}</label>
+          <input type="number" step="0.1" min="0" name="end_seconds" id="add-end" class="input" required>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-2">
+        <button type="button" class="btn ghost small" onclick="closeAddActivity()">{% trans "Anuluj" %}</button>
+        <button type="submit" class="btn primary small">{% trans "Dodaj" %}</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- tabela segmentów -->
 <section class="panel">
@@ -208,9 +260,17 @@
             <td><span class="conf {{ segment.confidence|confidence_level }}">{{ segment.confidence|confidence_percent }}</span></td>
             <td class="text-slate-500 max-w-xs">{{ segment.reason|default:"—" }}</td>
             <td class="text-right">
-              <button class="btn ghost small" type="button" title="Skocz do tego momentu w nagraniu" aria-label="Skocz do tego momentu w nagraniu" onclick="seekTo({{ segment.start_seconds|js_number }})">
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
-              </button>
+              <div class="inline-flex items-center gap-1">
+                <button class="btn ghost small" type="button" title="Skocz do tego momentu w nagraniu" aria-label="Skocz do tego momentu w nagraniu" onclick="seekTo({{ segment.start_seconds|js_number }})">
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
+                </button>
+                <form method="post" action="{% url 'segment_delete' analysis.pk segment.pk %}" onsubmit="return confirm('{% trans "Usunąć ten segment? Sąsiedni zostanie rozciągnięty, by domknąć lukę." %}')">
+                  {% csrf_token %}
+                  <button class="btn ghost small text-red-600 hover:bg-red-50" type="submit" title="{% trans 'Usuń segment' %}" aria-label="{% trans 'Usuń segment' %}">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+                  </button>
+                </form>
+              </div>
             </td>
           </tr>
           <tr>
@@ -261,27 +321,59 @@
 
 {% block scripts %}
 <script>
+  // Jawne odtwarzanie (przycisk play na liście segmentów): ustawia czas, odtwarza i przewija do wideo.
   function seekTo(seconds) {
     const player = document.getElementById("analysis-video");
     if (!player) return;
     player.currentTime = Number(seconds);
+    movePlayhead(Number(seconds));
     player.play();
     player.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
-  function focusActivity(barEl) {
+  // Samo przewinięcie bez auto-play (klik w oś / etykietę czynności).
+  function seekOnly(seconds) {
     const player = document.getElementById("analysis-video");
-    if (player) {
-      player.currentTime = parseFloat(barEl.dataset.start) || 0;
-      player.play();
-    }
-    // podświetl klikniety słupek na osi (outline z ujemnym offsetem — rysowany wewnątrz,
-    // nie przycina go overflow tracka i nie koliduje z ringiem odtwarzania)
+    const t = Math.max(0, Number(seconds) || 0);
+    if (player) player.currentTime = t;
+    movePlayhead(t);
+  }
+
+  function ganttDuration() {
+    const g = document.querySelector(".gantt");
+    return g ? parseFloat(g.dataset.duration) : 0;
+  }
+
+  // Jedna ciągła kreska nad całą osią — pozycja liczona w px względem obszaru torów.
+  function movePlayhead(t) {
+    const ph = document.getElementById("gantt-playhead");
+    const wrap = document.querySelector(".gantt-rows");
+    const track = document.querySelector(".gantt-track");
+    const duration = ganttDuration();
+    if (!ph || !wrap || !track || !duration) return;
+    const wr = wrap.getBoundingClientRect();
+    const tr = track.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, t / duration));
+    ph.style.left = tr.left - wr.left + pct * tr.width + "px";
+  }
+
+  // Klik w dowolne miejsce na osi (obszar torów) przesuwa kreskę tam, gdzie kliknięto.
+  function seekFromAxis(clientX) {
+    const track = document.querySelector(".gantt-track");
+    const duration = ganttDuration();
+    if (!track || !duration) return;
+    const tr = track.getBoundingClientRect();
+    if (clientX < tr.left) return; // klik w kolumnie etykiet — pomiń
+    const pct = Math.max(0, Math.min(1, (clientX - tr.left) / tr.width));
+    seekOnly(pct * duration);
+  }
+
+  // Klik w słupek: podświetlenie słupka i odpowiadającego segmentu na liście.
+  function focusActivity(barEl, event) {
     document.querySelectorAll(".gantt-bar.bar-selected").forEach((b) =>
       b.classList.remove("bar-selected", "outline", "outline-2", "outline-white", "outline-offset-[-2px]")
     );
     barEl.classList.add("bar-selected", "outline", "outline-2", "outline-white", "outline-offset-[-2px]");
-    // podświetl i przewiń do odpowiadającego segmentu na liście
     document.querySelectorAll(".segment-row.row-selected").forEach((r) =>
       r.classList.remove("row-selected", "bg-amber-100")
     );
@@ -295,31 +387,53 @@
     }
   }
 
+  // Modal „Dodaj aktywność" — domyślny zakres od bieżącej sekundy odtwarzacza.
+  function openAddActivity() {
+    const modal = document.getElementById("add-activity-modal");
+    const player = document.getElementById("analysis-video");
+    const duration = ganttDuration();
+    const start = player ? Math.max(0, Math.round((player.currentTime || 0) * 10) / 10) : 0;
+    let end = start + 5;
+    if (duration) end = Math.min(duration, Math.max(start + 0.5, end));
+    const s = document.getElementById("add-start");
+    const e = document.getElementById("add-end");
+    if (s) s.value = start.toFixed(1);
+    if (e) e.value = end.toFixed(1);
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+  function closeAddActivity() {
+    const modal = document.getElementById("add-activity-modal");
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAddActivity(); });
+
   (function () {
     const player = document.getElementById("analysis-video");
     if (!player) return;
     const rows = Array.from(document.querySelectorAll(".segment-row"));
     const bars = Array.from(document.querySelectorAll(".gantt-bar"));
-    const gantt = document.querySelector(".gantt");
-    const playheads = Array.from(document.querySelectorAll(".gantt-playhead"));
-    const duration = gantt ? parseFloat(gantt.dataset.duration) : 0;
     function inRange(el, t) {
       return t >= parseFloat(el.dataset.start) && t < parseFloat(el.dataset.end);
-    }
-    function movePlayhead(t) {
-      if (!duration) return;
-      const pct = Math.max(0, Math.min(100, (t / duration) * 100));
-      playheads.forEach((p) => (p.style.left = pct + "%"));
     }
     function refresh() {
       const t = player.currentTime;
       rows.forEach((r) => r.classList.toggle("bg-primary-50", inRange(r, t)));
-      bars.forEach((b) => b.classList.toggle("ring-2", inRange(b, t)));
-      bars.forEach((b) => b.classList.toggle("ring-amber-400", inRange(b, t)));
+      bars.forEach((b) => {
+        const on = inRange(b, t) && !b.classList.contains("bar-selected");
+        b.classList.toggle("ring-2", on);
+        b.classList.toggle("ring-amber-400", on);
+      });
       movePlayhead(t);
     }
     player.addEventListener("timeupdate", refresh);
     player.addEventListener("seeked", refresh);
+    player.addEventListener("loadedmetadata", () => movePlayhead(player.currentTime));
+    window.addEventListener("resize", () => movePlayhead(player.currentTime));
+    // Klik w dowolne miejsce na osi przesuwa kreskę (delegacja na całym obszarze).
+    const wrap = document.querySelector(".gantt-rows");
+    if (wrap) wrap.addEventListener("click", (e) => seekFromAxis(e.clientX));
     refresh();
   })();
 </script>

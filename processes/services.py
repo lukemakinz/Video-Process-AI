@@ -3,7 +3,7 @@ import re
 import subprocess
 import threading
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
@@ -18,6 +18,7 @@ from django.utils.translation import gettext_noop
 from .models import Activity, Analysis, AnalysisSegment, Operation, Video
 
 FACE_DETECTOR_MODEL = Path(__file__).resolve().parent / "assets" / "models" / "face_detection_yunet_2023mar.onnx"
+SYSTEM_UNCERTAIN_ACTIVITY = "niepewne"
 
 
 def quantize_seconds(value):
@@ -265,7 +266,10 @@ def anonymize_video(video):
 
     try:
         blurred_faces = _opencv_face_blur(input_path, output_path, progress_callback=update_progress)
-        mode = f"yunet_face_blur ({blurred_faces} zamaskowanych wystąpień twarzy)"
+        if blurred_faces:
+            anonymization_summary = f"Rozmyto {blurred_faces} wykrytych wystąpień twarzy."
+        else:
+            anonymization_summary = "Nie wykryto twarzy do rozmycia."
 
         with output_path.open("rb") as handle:
             video.anonymized_file.save(output_path.name, File(handle), save=False)
@@ -281,7 +285,7 @@ def anonymize_video(video):
         video.status = Video.Status.AWAITING_APPROVAL
         video.anonymized_at = timezone.now()
         video.approved_for_analysis_at = None
-        video.anonymization_error = f"Tryb anonimizacji: {mode}. Sprawdź podgląd przed zatwierdzeniem analizy."
+        video.anonymization_error = f"{anonymization_summary} Sprawdź podgląd przed zatwierdzeniem analizy."
         video.save(
             update_fields=[
                 "anonymized_file",
@@ -402,16 +406,93 @@ def _duration_rule_lines(duration_seconds):
     return lines
 
 
+def _segment_contract_lines(include_operation=False):
+    operation_field = '"operation":"nazwa operacji",' if include_operation else ""
+    return [
+        "Zwróć wyłącznie poprawny JSON zgodny ze schematem:",
+        (
+            '{"segments":[{'
+            f"{operation_field}"
+            '"start_seconds":0.0,'
+            '"end_seconds":1.0,'
+            '"activity":"nazwa czynności albo niepewne",'
+            '"confidence":0.62,'
+            '"alternative_activity":"inna możliwa czynność albo null",'
+            '"evidence":["konkretny widoczny/słyszalny sygnał"],'
+            '"missing_evidence":["czego nie widać, a byłoby potrzebne do pewności"],'
+            '"reason":"krótkie uzasadnienie",'
+            '"confidence_reason":"dlaczego confidence ma właśnie taki poziom"'
+            "}]}"
+        ),
+        'Nie używaj kluczy typu "box_2d", bounding box ani dodatkowych opakowań; lista segmentów ma być wyłącznie pod kluczem "segments".',
+    ]
+
+
+def _confidence_rule_lines():
+    return [
+        "Kalibracja confidence:",
+        "- nie używaj stałej wartości confidence dla wielu segmentów; każda wartość ma wynikać z jakości dowodu,",
+        "- 0.90-1.00 tylko gdy widać charakterystyczne, stabilne sygnały startu, trwania i końca czynności oraz brak realnej alternatywy,",
+        "- 0.70-0.89 gdy czynność jest prawdopodobna, ale część sygnałów jest pośrednia albo krótka,",
+        "- 0.45-0.69 gdy istnieje sensowna alternatywna czynność lub widać tylko część dowodów,",
+        "- 0.20-0.44 gdy obraz/dźwięk jest niejasny; wtedy zwykle wybierz activity=\"niepewne\",",
+        "- jeśli ruch jest tylko mikro-korektą, przejściem albo gestem bez stabilnej zmiany czynności, nie twórz nowej pewnej czynności bez mocnego dowodu,",
+        "- jeśli krótki fragment ma stabilne, widoczne sygnały innej zdefiniowanej czynności, wydziel go jako osobny segment z adekwatnym confidence zamiast ukrywać go w sąsiednim segmencie.",
+    ]
+
+
+def _granularity_rule_lines():
+    return [
+        "Granularność segmentów:",
+        "- nie scalaj kilku odrębnych wystąpień tej samej czynności w jeden długi segment, jeśli widać między nimi wyraźną zmianę kierunku, obiektu, narzędzia, fazy pracy albo krótką fazę przejściową,",
+        "- dziel takie wystąpienia na osobne segmenty, gdy da się wskazać ich granice czasowe z dokładnością około 1 sekundy lub lepszą,",
+        "- nie używaj kryterium \"za krótkie, żeby było znaczące\" do usuwania widocznych fragmentów innej zdefiniowanej czynności; krótki segment jest lepszy niż błędne włączenie go do długiego segmentu sąsiedniego,",
+        "- długi segment może mieć wysokie confidence tylko wtedy, gdy ta sama czynność jest ciągła przez cały zakres czasu; jeśli wewnątrz widać przeplot A/B/A, podziel go na A, B i A,",
+        "- minimalny czas trwania czynności jest wskazówką do obniżenia confidence i review, a nie pozwoleniem na wchłonięcie krótszego fragmentu przez inną czynność,",
+        "- nie dziel rytmicznych mikro-ruchów w ramach tej samej ciągłej czynności, jeśli nie zmieniają znaczenia procesu.",
+    ]
+
+
+def _system_uncertain_lines():
+    return [
+        f'Poza zdefiniowanymi czynnościami możesz użyć systemowej etykiety "{SYSTEM_UNCERTAIN_ACTIVITY}".',
+        f'Użyj "{SYSTEM_UNCERTAIN_ACTIVITY}", gdy nie da się uczciwie rozstrzygnąć między czynnościami albo brakuje kluczowych dowodów.',
+        f'"{SYSTEM_UNCERTAIN_ACTIVITY}" nie jest nową czynnością procesu, tylko sygnałem do przeglądu przez człowieka.',
+    ]
+
+
+def _active_confusion_rule_lines(activities, indent=""):
+    seen = set()
+    lines = []
+    for activity in activities:
+        hints = activity.hints.filter(is_active=True, confused_with__isnull=False).select_related(
+            "confused_with"
+        )
+        for hint in hints:
+            text = hint.text.strip()
+            if not text:
+                continue
+            key = (activity.pk, hint.confused_with_id, text.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            lines.append(
+                f'{indent}- Gdy wahasz się między "{activity.name}" i "{hint.confused_with.name}", '
+                f'wybierz "{activity.name}" tylko jeśli pasuje ta korekta: {text}. '
+                f'Jeśli dowód jest częściowy, obniż confidence albo użyj "{SYSTEM_UNCERTAIN_ACTIVITY}".'
+            )
+    return lines
+
+
 def build_analysis_prompt(operation, duration_seconds=None):
     activities = list(operation.activities.all())
     lines = [
         f'Analizujesz zanonimizowane nagranie operacji "{operation.name}" w procesie "{operation.process.name}".',
         "",
         "Przypisz każdy fragment nagrania wyłącznie do jednej z poniższych czynności.",
-        "Nie twórz nowych nazw czynności. Nie zgaduj.",
-        'Gdy nie ma wystarczających informacji, wybierz czynność "niepewne", jeśli jest dostępna.',
-        "Zwróć wyłącznie poprawny JSON zgodny ze schematem:",
-        '{"segments":[{"start_seconds":0.0,"end_seconds":1.0,"activity":"nazwa","confidence":0.8,"reason":"uzasadnienie"}]}',
+        f'Nie twórz nowych nazw czynności poza systemową etykietą "{SYSTEM_UNCERTAIN_ACTIVITY}". Nie zgaduj.',
+        *_system_uncertain_lines(),
+        *_segment_contract_lines(),
         "",
         "Kontekst procesu:",
         f"Nazwa procesu: {operation.process.name}",
@@ -443,6 +524,9 @@ def build_analysis_prompt(operation, duration_seconds=None):
                 activity_lines.append(f"- {hint.text}{suffix}")
         activity_lines.append("")
         lines.extend(activity_lines)
+    confusion_lines = _active_confusion_rule_lines(activities)
+    if confusion_lines:
+        lines.extend(["Reguły rozróżniania często mylonych czynności:", *confusion_lines, ""])
     if len(activities) > 1:
         sequence = " → ".join(activity.name for activity in activities)
         lines.extend(
@@ -457,8 +541,12 @@ def build_analysis_prompt(operation, duration_seconds=None):
             "Zasady segmentacji:",
             "- segmenty nie mogą nachodzić na siebie,",
             *_duration_rule_lines(duration_seconds),
-            "- confidence ma być liczbą od 0 do 1,",
+            *_granularity_rule_lines(),
+            *_confidence_rule_lines(),
             "- reason ma krótko wyjaśniać, co widać lub słychać,",
+            "- evidence ma zawierać konkretne obserwacje, a nie parafrazę nazwy czynności,",
+            "- alternative_activity ustaw, gdy realnie możliwa jest inna czynność z listy,",
+            "- missing_evidence zostaw jako pustą listę tylko wtedy, gdy nie brakuje żadnego ważnego dowodu,",
             "- odpowiedź ma zawierać tylko JSON, bez komentarzy i markdown.",
         ]
     )
@@ -506,11 +594,11 @@ def build_multi_operation_prompt(process, operations, duration_seconds=None):
         "   - możesz być w czynności 4, a następną NIE jest 5, bo trzeba poprawić coś z czynności 1,",
         "   - czynności mogą się powtarzać, być pomijane lub przeplatane.",
         "   Kieruj się tym, co realnie widać, a nie zakładaną sekwencją.",
-        '5. Gdy nie możesz pewnie określić operacji lub czynności — wybierz czynność "niepewne" (jeśli dostępna) zamiast zgadywać i obniż confidence.',
+        f'5. Gdy nie możesz pewnie określić operacji lub czynności — wybierz activity="{SYSTEM_UNCERTAIN_ACTIVITY}" zamiast zgadywać i obniż confidence.',
         "6. Przerwy, brak pracy i czekanie oznaczaj odpowiednią czynnością, jeśli jest zdefiniowana.",
+        *_system_uncertain_lines(),
         "",
-        "Zwróć wyłącznie poprawny JSON zgodny ze schematem:",
-        '{"segments":[{"operation":"nazwa operacji","activity":"nazwa czynności","start_seconds":0.0,"end_seconds":1.0,"confidence":0.8,"reason":"uzasadnienie"}]}',
+        *_segment_contract_lines(include_operation=True),
         "",
         "KONTEKST PROCESU:",
         f"Nazwa procesu: {process.name}",
@@ -534,13 +622,21 @@ def build_multi_operation_prompt(process, operations, duration_seconds=None):
         lines.append("   Czynności:")
         for act_index, activity in enumerate(activities, start=1):
             lines.extend(_render_activity_block(act_index, activity))
+        confusion_lines = _active_confusion_rule_lines(activities, indent="   ")
+        if confusion_lines:
+            lines.append("   Reguły rozróżniania często mylonych czynności:")
+            lines.extend(confusion_lines)
     lines.extend(
         [
             "",
             "ZASADY SEGMENTACJI:",
             *_duration_rule_lines(duration_seconds),
-            "- confidence ma być liczbą od 0 do 1,",
+            *_granularity_rule_lines(),
+            *_confidence_rule_lines(),
             "- reason ma krótko wyjaśniać, co widać lub słychać oraz po czym poznajesz operację,",
+            "- evidence ma zawierać konkretne obserwacje, a nie parafrazę nazwy czynności,",
+            "- alternative_activity ustaw, gdy realnie możliwa jest inna czynność z tej samej operacji,",
+            "- missing_evidence zostaw jako pustą listę tylko wtedy, gdy nie brakuje żadnego ważnego dowodu,",
             "- odpowiedź ma zawierać tylko JSON, bez komentarzy i markdown.",
         ]
     )
@@ -559,15 +655,87 @@ def build_analysis_prompt_for_video(video):
     raise ValueError("Wideo nie ma przypisanej operacji do analizy.")
 
 
+def _coerce_segments_payload(parsed):
+    if isinstance(parsed, list):
+        if len(parsed) == 1 and isinstance(parsed[0], dict):
+            for key in ("segments", "box_2d"):
+                if isinstance(parsed[0].get(key), list):
+                    return {"segments": parsed[0][key]}
+        return {"segments": parsed}
+    if isinstance(parsed, dict):
+        for key in ("box_2d",):
+            if isinstance(parsed.get(key), list):
+                return {"segments": parsed[key]}
+        return parsed
+    return parsed
+
+
+def _extract_balanced_json_array(text, start_index):
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start_index, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                return text[start_index : index + 1]
+    return ""
+
+
+def _extract_wrapped_segments(text):
+    for key in ("segments", "box_2d"):
+        match = re.search(rf'"{key}"\s*:\s*\[', text)
+        if not match:
+            continue
+        start = text.find("[", match.start())
+        if start < 0:
+            continue
+        fragment = _extract_balanced_json_array(text, start)
+        if not fragment:
+            continue
+        parsed = json.loads(fragment)
+        if isinstance(parsed, list):
+            return {"segments": parsed}
+    return None
+
+
 def _extract_json(text):
     stripped = text.strip()
     if stripped.startswith("```"):
         stripped = re.sub(r"^```(?:json)?", "", stripped).strip()
         stripped = re.sub(r"```$", "", stripped).strip()
-    match = re.search(r"\{.*\}", stripped, flags=re.DOTALL)
+
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, (list, dict)):
+        return _coerce_segments_payload(parsed)
+
+    match = re.search(r"(\{.*\}|\[.*\])", stripped, flags=re.DOTALL)
     if not match:
         raise ValueError("Odpowiedź modelu nie zawiera obiektu JSON.")
-    return json.loads(match.group(0))
+    try:
+        parsed = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        wrapped = _extract_wrapped_segments(stripped)
+        if wrapped is not None:
+            return wrapped
+        raise
+    return _coerce_segments_payload(parsed)
 
 
 def _activity_lookup(operation):
@@ -575,6 +743,171 @@ def _activity_lookup(operation):
     lookup = {activity.name.casefold(): activity for activity in activities}
     uncertain = next((a for a in activities if "niepew" in a.name.casefold()), None)
     return lookup, uncertain
+
+
+def _is_uncertain_activity_name(name):
+    normalized = str(name or "").strip().casefold()
+    return normalized in {
+        SYSTEM_UNCERTAIN_ACTIVITY,
+        "uncertain",
+        "unclear",
+        "niejasne",
+        "nie wiadomo",
+    } or "niepew" in normalized
+
+
+def _coerce_text_list(value):
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _clean_optional_name(value):
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text.casefold() in {"", "null", "none", "brak", "n/a"}:
+        return ""
+    return text
+
+
+def _clamp_confidence(value):
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return max(0.0, min(1.0, confidence))
+
+
+def _resolve_activity(activity_name, lookup, uncertain):
+    if _is_uncertain_activity_name(activity_name):
+        return uncertain, uncertain.name if uncertain else SYSTEM_UNCERTAIN_ACTIVITY
+    activity = lookup.get(str(activity_name or "").strip().casefold())
+    if activity is not None:
+        return activity, activity.name
+    if uncertain is not None:
+        return uncertain, uncertain.name
+    return None, SYSTEM_UNCERTAIN_ACTIVITY
+
+
+def _compose_segment_reason(item):
+    parts = []
+    reason = str(item.get("reason", "")).strip()
+    if reason:
+        parts.append(reason)
+    evidence = _coerce_text_list(item.get("evidence"))
+    if evidence:
+        parts.append("Dowody: " + "; ".join(evidence))
+    missing = _coerce_text_list(item.get("missing_evidence"))
+    if missing:
+        parts.append("Brakujące dowody: " + "; ".join(missing))
+    alternative = _clean_optional_name(item.get("alternative_activity"))
+    if alternative and not _is_uncertain_activity_name(alternative):
+        parts.append(f"Alternatywa: {alternative}")
+    confidence_reason = str(item.get("confidence_reason") or "").strip()
+    if confidence_reason:
+        parts.append(f"Uzasadnienie pewności: {confidence_reason}")
+    return " | ".join(parts)[:2000]
+
+
+def _append_reason_note(segment, note):
+    current = (segment.get("reason") or "").strip()
+    segment["reason"] = f"{current} | {note}"[:2000] if current else note[:2000]
+
+
+def _calibrate_confidence(item, activity, activity_name, start, end):
+    raw_confidence = _clamp_confidence(item.get("confidence", 0))
+    confidence = raw_confidence
+    evidence = _coerce_text_list(item.get("evidence"))
+    missing = _coerce_text_list(item.get("missing_evidence"))
+    alternative = _clean_optional_name(item.get("alternative_activity"))
+    has_alternative = bool(alternative) and not _is_uncertain_activity_name(alternative)
+    has_structured_confidence = any(
+        key in item
+        for key in ("evidence", "missing_evidence", "alternative_activity", "confidence_reason")
+    )
+
+    if raw_confidence >= 0.9 and not has_structured_confidence:
+        confidence = min(confidence, 0.82)
+    if not evidence:
+        confidence = min(confidence, 0.82)
+    if has_alternative and alternative.casefold() != str(activity_name).casefold():
+        confidence = min(confidence, 0.64)
+    if missing:
+        confidence = min(confidence, 0.64 if has_alternative else 0.72)
+    if _is_uncertain_activity_name(activity_name):
+        confidence = min(confidence, 0.45)
+
+    duration = end - start
+    if duration < Decimal("0.75"):
+        confidence = min(confidence, 0.50)
+    elif duration < Decimal("1.50"):
+        confidence = min(confidence, 0.62)
+    elif duration < Decimal("2.50"):
+        confidence = min(confidence, 0.76)
+
+    if (
+        activity is not None
+        and activity.minimum_duration_seconds is not None
+        and duration < Decimal(str(activity.minimum_duration_seconds))
+    ):
+        confidence = min(confidence, 0.50)
+
+    return round(confidence, 4), raw_confidence
+
+
+def _lane_key(segment):
+    operation = segment.get("operation")
+    if operation is not None:
+        return ("op", operation.pk)
+    return ("single", segment.get("operation_name", ""))
+
+
+def _apply_temporal_quality_checks(segments):
+    lanes = defaultdict(list)
+    for segment in segments:
+        lanes[_lane_key(segment)].append(segment)
+
+    for lane in lanes.values():
+        lane.sort(key=lambda item: (item["start_seconds"], item["end_seconds"]))
+        if len(lane) >= 4:
+            raw_counts = Counter(
+                round(float(segment.get("_model_confidence", segment["confidence"])), 2)
+                for segment in lane
+                if float(segment.get("_model_confidence", segment["confidence"])) >= 0.9
+            )
+            if raw_counts:
+                plateau_value, plateau_count = raw_counts.most_common(1)[0]
+                if plateau_count >= max(4, int(len(lane) * 0.6)):
+                    for segment in lane:
+                        if round(float(segment.get("_model_confidence", segment["confidence"])), 2) == plateau_value:
+                            segment["confidence"] = min(segment["confidence"], 0.64)
+                            _append_reason_note(
+                                segment,
+                                "Kalibracja: model użył powtarzalnej wysokiej pewności; segment wymaga ostrożnej weryfikacji.",
+                            )
+
+        for index in range(1, len(lane) - 1):
+            previous = lane[index - 1]
+            current = lane[index]
+            following = lane[index + 1]
+            duration = current["end_seconds"] - current["start_seconds"]
+            same_neighbors = previous["activity_name"] == following["activity_name"]
+            different_middle = current["activity_name"] != previous["activity_name"]
+            if same_neighbors and different_middle and duration <= Decimal("2.00"):
+                current["confidence"] = min(current["confidence"], 0.58)
+                _append_reason_note(
+                    current,
+                    "Kontrola czasowa: krótki przełącznik między dwiema częściami tej samej czynności; możliwa korekta lub przejście zamiast osobnej czynności.",
+                )
+
+        for segment in lane:
+            segment.pop("_model_confidence", None)
+
+    return segments
 
 
 def _normalize_segments(payload, operation, duration_seconds=None):
@@ -588,10 +921,7 @@ def _normalize_segments(payload, operation, duration_seconds=None):
 
     for item in payload["segments"]:
         activity_name = str(item.get("activity", "")).strip()
-        activity = lookup.get(activity_name.casefold())
-        if activity is None and uncertain is not None:
-            activity = uncertain
-            activity_name = uncertain.name
+        activity, activity_name = _resolve_activity(activity_name, lookup, uncertain)
         start = quantize_seconds(item.get("start_seconds", 0))
         end = quantize_seconds(item.get("end_seconds", 0))
         if start < last_end:
@@ -601,22 +931,23 @@ def _normalize_segments(payload, operation, duration_seconds=None):
             end = min(end, max_duration)
         if end <= start:
             continue
-        confidence = float(item.get("confidence", 0))
+        confidence, raw_confidence = _calibrate_confidence(item, activity, activity_name, start, end)
         normalized.append(
             {
                 "activity": activity,
                 "activity_name": activity.name if activity else activity_name,
                 "start_seconds": start,
                 "end_seconds": end,
-                "confidence": max(0.0, min(1.0, confidence)),
-                "reason": str(item.get("reason", ""))[:2000],
+                "confidence": confidence,
+                "reason": _compose_segment_reason(item),
+                "_model_confidence": raw_confidence,
             }
         )
         last_end = end
 
     if not normalized:
         raise ValueError("Model nie zwrócił poprawnych segmentów.")
-    return normalized
+    return _apply_temporal_quality_checks(normalized)
 
 
 def _multi_activity_lookup(operations):
@@ -652,10 +983,7 @@ def _normalize_multi_segments(payload, operations, duration_seconds=None):
             continue
         operation = entry["operation"]
         activity_name = str(item.get("activity", "")).strip()
-        activity = entry["lookup"].get(activity_name.casefold())
-        if activity is None and entry["uncertain"] is not None:
-            activity = entry["uncertain"]
-            activity_name = entry["uncertain"].name
+        activity, activity_name = _resolve_activity(activity_name, entry["lookup"], entry["uncertain"])
         start = quantize_seconds(item.get("start_seconds", 0))
         end = quantize_seconds(item.get("end_seconds", 0))
         # Brak nakładania tylko w obrębie tej samej operacji; różne operacje równolegle.
@@ -666,7 +994,7 @@ def _normalize_multi_segments(payload, operations, duration_seconds=None):
             end = min(end, max_duration)
         if end <= start:
             continue
-        confidence = float(item.get("confidence", 0))
+        confidence, raw_confidence = _calibrate_confidence(item, activity, activity_name, start, end)
         normalized.append(
             {
                 "operation": operation,
@@ -675,15 +1003,16 @@ def _normalize_multi_segments(payload, operations, duration_seconds=None):
                 "activity_name": activity.name if activity else activity_name,
                 "start_seconds": start,
                 "end_seconds": end,
-                "confidence": max(0.0, min(1.0, confidence)),
-                "reason": str(item.get("reason", ""))[:2000],
+                "confidence": confidence,
+                "reason": _compose_segment_reason(item),
+                "_model_confidence": raw_confidence,
             }
         )
         last_end_by_op[operation.pk] = end
 
     if not normalized:
         raise ValueError("Model nie zwrócił poprawnych segmentów.")
-    return normalized
+    return _apply_temporal_quality_checks(normalized)
 
 
 def _mock_multi_segments(operations, duration_seconds):
@@ -886,7 +1215,7 @@ def _wait_for_uploaded_file(client, uploaded):
     return uploaded
 
 
-def _analyze_with_gemini(video, prompt):
+def _analyze_with_gemini(video, prompt, model_name=None):
     """Zwraca krotkę (surowy_tekst, usage), gdzie usage to dict z tokenami
     zwróconymi przez API albo None (wtedy koszt jest szacowany z długości wideo)."""
     if not video.approved_for_analysis_at:
@@ -906,7 +1235,7 @@ def _analyze_with_gemini(video, prompt):
     uploaded = client.files.upload(file=video.anonymized_file.path)
     uploaded = _wait_for_uploaded_file(client, uploaded)
     response = client.models.generate_content(
-        model=settings.GEMINI_VIDEO_MODEL,
+        model=model_name or settings.GEMINI_VIDEO_MODEL,
         contents=[uploaded, prompt],
     )
     meta = getattr(response, "usage_metadata", None)
@@ -983,23 +1312,29 @@ def run_video_analysis(video):
     if not operations:
         raise ValueError("Wideo nie ma przypisanej operacji do analizy.")
     prompt = build_analysis_prompt_for_video(video)
+    model_name = video.analysis_model_name or settings.GEMINI_VIDEO_MODEL
     analysis = Analysis.objects.create(
         video=video,
         status=Analysis.Status.RUNNING,
-        model_name=settings.GEMINI_VIDEO_MODEL if not settings.GEMINI_USE_MOCK else "mock",
+        model_name=model_name if not settings.GEMINI_USE_MOCK else "mock",
         prompt=prompt,
         started_at=timezone.now(),
     )
     video.status = Video.Status.ANALYZING
     video.save(update_fields=["status"])
+    raw_response = ""
 
     try:
-        raw_response, usage = _analyze_with_gemini(video, prompt)
+        raw_response, usage = _analyze_with_gemini(video, prompt, model_name=model_name)
         try:
             payload = _extract_json(raw_response)
             segments = _segments_from_payload(payload, operations, video.duration_seconds)
         except Exception:
-            if not settings.GEMINI_FALLBACK_TO_MOCK:
+            allow_mock_fallback = (
+                settings.GEMINI_FALLBACK_TO_MOCK
+                and (settings.GEMINI_USE_MOCK or not settings.GEMINI_API_KEY)
+            )
+            if not allow_mock_fallback:
                 raise
             if len(operations) > 1:
                 payload = _mock_multi_segments(operations, video.duration_seconds)
@@ -1046,8 +1381,9 @@ def run_video_analysis(video):
     except Exception as exc:
         analysis.status = Analysis.Status.FAILED
         analysis.error_message = str(exc)
+        analysis.raw_response = raw_response
         analysis.completed_at = timezone.now()
-        analysis.save(update_fields=["status", "error_message", "completed_at"])
+        analysis.save(update_fields=["status", "error_message", "raw_response", "completed_at"])
         video.status = Video.Status.FAILED
         video.save(update_fields=["status"])
     return analysis
@@ -1211,7 +1547,7 @@ def run_analysis_in_background(video):
     return thread
 
 
-def segments_needing_review(analysis, threshold=0.4):
+def segments_needing_review(analysis, threshold=0.65):
     """Segmenty wymagające uwagi człowieka: niska pewność lub czynność 'niepewne'."""
     flagged = []
     for segment in analysis.segments.select_related("activity"):

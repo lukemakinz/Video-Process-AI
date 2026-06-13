@@ -68,7 +68,7 @@
       .panel-head { @apply flex items-start justify-between gap-4 mb-4 pb-4 border-b border-slate-100; }
 
       /* --- Typography helpers --- */
-      .eyebrow { @apply text-xs font-semibold uppercase tracking-wider text-primary; }
+      .eyebrow { @apply text-[11px] font-medium uppercase tracking-wider text-slate-400 mb-2; }
       .lead    { @apply text-slate-500 mt-1; }
       .muted   { @apply text-slate-500; }
 
@@ -126,7 +126,9 @@
                flex items-center px-2 overflow-hidden;
       }
       .gantt-bar span { @apply font-mono text-[10px] text-white truncate; }
-      .gantt-playhead { @apply absolute top-0 bottom-0 w-0.5 bg-red-500/80 pointer-events-none z-20; transition: left 0.15s linear; }
+      .gantt-rows { @apply relative; }
+      .gantt-track { @apply cursor-pointer; }
+      .gantt-playhead { @apply absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none z-30; transition: left 0.12s linear; }
 
       /* --- Activity bars --- */
       .activity-bars { @apply space-y-3; }
