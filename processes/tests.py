@@ -112,6 +112,32 @@ class ProcessDemoTests(TestCase):
         self.assertTrue(all(s.get("confidence_unreliable") for s in segs))
         self.assertTrue(all(s["confidence"] <= 0.64 for s in segs))
 
+    def test_unreliable_segments_excluded_from_review_but_flagged_at_analysis_level(self):
+        from processes.services import (
+            segments_needing_review,
+            analysis_confidence_unreliable,
+        )
+
+        video = Video.objects.create(
+            operation=self.operation,
+            original_filename="demo.mp4",
+            duration_seconds=Decimal("20.00"),
+        )
+        analysis = Analysis.objects.create(video=video, status=Analysis.Status.COMPLETED)
+        for i in range(4):
+            AnalysisSegment.objects.create(
+                analysis=analysis,
+                activity=self.load,
+                activity_name=self.load.name,
+                start_seconds=Decimal(i * 5),
+                end_seconds=Decimal(i * 5 + 5),
+                confidence=0.64,
+                confidence_unreliable=True,
+            )
+        # plateau wykryty na poziomie analizy, ale segmenty nie są listowane pojedynczo
+        self.assertTrue(analysis_confidence_unreliable(analysis))
+        self.assertEqual(segments_needing_review(analysis), [])
+
     def test_video_content_part_sets_fps_from_settings(self):
         from processes.services import _video_content_part
 

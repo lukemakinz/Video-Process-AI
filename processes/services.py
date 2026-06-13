@@ -1603,9 +1603,28 @@ def run_analysis_in_background(video):
 
 
 def segments_needing_review(analysis, threshold=0.65):
-    """Segmenty wymagające uwagi człowieka: niska pewność lub czynność 'niepewne'."""
+    """Segmenty wymagające uwagi człowieka: niska pewność lub czynność 'niepewne'.
+
+    Segmenty oznaczone jako 'pewność niewiarygodna' (model nie różnicował pewności
+    w całej analizie) NIE są tu listowane pojedynczo — pokazujemy je zbiorczo jako
+    notkę na poziomie analizy (patrz analysis_confidence_unreliable), żeby dobra
+    analiza nie tonęła w kilkunastu „alarmach". Wyjątek: gdy segment jest też
+    merytorycznie 'niepewne', nadal trafia do przeglądu."""
     flagged = []
     for segment in analysis.segments.select_related("activity"):
-        if segment.confidence < threshold or "niepew" in segment.activity_name.casefold():
+        is_uncertain = "niepew" in segment.activity_name.casefold()
+        low_confidence = segment.confidence < threshold and not segment.confidence_unreliable
+        if is_uncertain or low_confidence:
             flagged.append(segment)
     return flagged
+
+
+def analysis_confidence_unreliable(analysis):
+    """True, gdy model nie różnicował pewności w większości segmentów analizy
+    (>=60% oznaczonych jako niewiarygodne). Wtedy liczby są orientacyjne i UI
+    pokazuje jedną notkę na poziomie analizy zamiast alarmu przy każdym segmencie."""
+    segments = list(analysis.segments.all())
+    if not segments:
+        return False
+    unreliable = sum(1 for segment in segments if segment.confidence_unreliable)
+    return unreliable >= max(1, int(len(segments) * 0.6))

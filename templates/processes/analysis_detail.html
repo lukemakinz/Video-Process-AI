@@ -20,10 +20,21 @@
     {% comment %} Eksport CSV chwilowo wyłączony
     <a class="btn ghost" href="{% url 'analysis_export_csv' analysis.pk %}">{% trans "Eksport CSV" %}</a>
     {% endcomment %}
-    <a class="btn ghost" href="{% url 'video_review' analysis.video.pk %}">{% trans "Analizuj ponownie" %}</a>
+    <button type="button" class="btn ghost" onclick="openRerun()">{% trans "Analizuj ponownie" %}</button>
     {% include "processes/_status_badge.html" with code=analysis.status label=analysis.get_status_display big=True no_dot=True %}
   </div>
 </section>
+
+{% if confidence_plateau %}
+  <section class="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5 mb-6">
+    <div class="flex items-start gap-2">
+      <svg class="h-5 w-5 text-slate-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>
+      <p class="text-sm text-slate-600">
+        {% trans "Model zwrócił podobną, wysoką pewność dla większości segmentów, więc liczbowa pewność jest tu orientacyjna i oznaczona jako niewiarygodna. Sama klasyfikacja może być trafna — zalecamy przegląd całości zamiast polegania na procentach." %}
+      </p>
+    </div>
+  </section>
+{% endif %}
 
 {% if needs_review %}
   <section class="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5 mb-6">
@@ -237,6 +248,35 @@
   </div>
 </div>
 
+<!-- modal: analizuj ponownie -->
+<div id="rerun-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm p-4" onclick="if(event.target===this)closeRerun()">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-5" role="dialog" aria-modal="true" aria-labelledby="rerun-title">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="rerun-title" class="font-semibold text-slate-900">{% trans "Analizuj ponownie" %}</h3>
+      <button type="button" class="text-slate-400 hover:text-slate-700 text-lg leading-none" onclick="closeRerun()" aria-label="{% trans 'Zamknij' %}">✕</button>
+    </div>
+    <form method="post" action="{% url 'video_approve_and_analyze' analysis.video.pk %}" class="flex flex-col gap-4">
+      {% csrf_token %}
+      <div class="field mb-0">
+        <label for="rerun-model">{% trans "Model analizy" %}</label>
+        <select id="rerun-model" name="analysis_model_name" class="select">
+          {% for value, label in model_choices %}
+            <option value="{{ value }}"{% if value == selected_model %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <p class="help">{% trans "Domyślnie model użyty w tej analizie." %}</p>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button type="button" class="btn ghost small" onclick="closeRerun()">{% trans "Anuluj" %}</button>
+        <button type="submit" class="btn primary small inline-flex items-center gap-1.5">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
+          {% trans "Uruchom analizę" %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- tabela segmentów -->
 <section class="panel">
   <div class="panel-head"><h2>{% trans "Lista segmentów" %}</h2></div>
@@ -418,7 +458,17 @@
     modal.classList.add("hidden");
     modal.classList.remove("flex");
   }
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAddActivity(); });
+  function openRerun() {
+    const modal = document.getElementById("rerun-modal");
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+  function closeRerun() {
+    const modal = document.getElementById("rerun-modal");
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAddActivity(); closeRerun(); } });
 
   (function () {
     const player = document.getElementById("analysis-video");

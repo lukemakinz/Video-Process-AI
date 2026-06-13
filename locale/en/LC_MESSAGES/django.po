@@ -997,6 +997,18 @@ msgstr ""
 msgid "niewiarygodna"
 msgstr "unreliable"
 
+#: templates/processes/analysis_detail.html
+msgid "Analizuj ponownie"
+msgstr "Analyze again"
+
+#: templates/processes/analysis_detail.html
+msgid "Domyślnie model użyty w tej analizie."
+msgstr "Defaults to the model used in this analysis."
+
+#: templates/processes/analysis_detail.html
+msgid "Model zwrócił podobną, wysoką pewność dla większości segmentów, więc liczbowa pewność jest tu orientacyjna i oznaczona jako niewiarygodna. Sama klasyfikacja może być trafna — zalecamy przegląd całości zamiast polegania na procentach."
+msgstr "The model returned similar, high confidence for most segments, so the numeric confidence here is only approximate and marked as unreliable. The classification itself may be correct — we recommend reviewing the whole result instead of relying on the percentages."
+
 #: templates/processes/analysis_detail.html:41
 #: templates/processes/analysis_detail.html:266
 msgid "Model nie różnicował pewności — liczba jest niewiarygodna."

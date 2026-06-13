@@ -47,6 +47,7 @@ Model ma zwracać dla każdego segmentu:
 {
   "start_seconds": 0.0,
   "end_seconds": 1.0,
+  "observed": "neutralny opis tego, co widać, BEZ nazywania czynności",
   "activity": "nazwa czynności albo niepewne",
   "confidence": 0.62,
   "alternative_activity": "inna możliwa czynność albo null",
@@ -56,6 +57,13 @@ Model ma zwracać dla każdego segmentu:
   "confidence_reason": "dlaczego confidence ma właśnie taki poziom"
 }
 ```
+
+Pole `observed` jest celowo PIERWSZE przed `activity`. Model generuje JSON od
+lewej do prawej, więc najpierw musi opisać sam obraz, a `activity` wybrać dopiero
+z tego, co zaobserwował. To uniwersalna technika anty-konfabulacyjna („najpierw
+patrz, potem nazywaj") — odcina mechanizm „wybierz etykietę, potem dorób pasujący
+dowód". `observed` nie jest zapisywany jako osobne pole segmentu (parser je
+pomija), służy wyłącznie wymuszeniu groundingu w odpowiedzi modelu.
 
 Dla analizy multi-operation dochodzi pole `operation`.
 
@@ -117,6 +125,13 @@ tak samo dla jazdy, gotowania czy pracy biurowej:
   inaczej `niepewne`,
 - `evidence` może zawierać tylko obserwacje możliwe do wskazania na klatce — bez
   sygnałów, których nie widać (np. „skręt", gdy kierunek się nie zmienia),
+- oceniaj każdy fragment **niezależnie** — nie wnioskuj czynności z oczekiwanej
+  kolejności, rytmu ani z sąsiednich segmentów; nie układaj „zgrabnego"
+  naprzemiennego wzoru, jeśli obraz go nie potwierdza (to częsta narracyjna
+  konfabulacja modelu),
+- `confidence` ma odzwierciedlać, na ile **jednoznaczny i widoczny** jest sygnał
+  odróżniający tę czynność od najbliższej alternatywy, a nie ogólne wrażenie, że
+  czynność „pasuje",
 - brak wyraźnego sygnału odróżniającego = `niepewne`, a nie najbardziej
   prawdopodobny strzał.
 
@@ -124,6 +139,37 @@ Reguła jest świadomie ogólna, żeby prompt pozostał uniwersalny. Domenowo-
 specyficzne rozróżnienia (np. „prosto vs zakręt") nie są zaszywane w kodzie —
 budują się przez definicje czynności (`Rozpoznaj, gdy` / `Nie rozpoznawaj, gdy`)
 oraz przez pary `confused_with` z feedbacku użytkownika.
+
+Te same zasady wymusza generator definicji czynności (asystent AI w formularzu
+nowej czynności, `assist_activity`). Generator jest uniwersalny (bez założeń o
+branży), preferuje JEDEN dominujący, duży sygnał zamiast mikro-detali (które
+model zmyśla), a w `exclusion_rules` wymaga wskazania bliźniaka + sygnału
+różnicującego + furtki `niepewne`. Zakazane są reguły o jakości, technice,
+bezpieczeństwie czy wyniku — tylko o tym, co widać.
+
+## Próbkowanie klatek wideo
+
+Domyślnie Gemini próbkuje wideo z ~1 klatką/s, co nie wystarcza do rozróżniania
+krótkich, szybkich ruchów. Wysyłka ustawia `fps` przez `video_metadata`
+(`_video_content_part`), konfigurowalne przez `GEMINI_VIDEO_FPS` (domyślnie 5,
+`0` = domyślne API). Wyższy fps = więcej realnych klatek i proporcjonalnie wyższy
+koszt tokenów wideo. Uwaga: więcej klatek pomaga modelowi widzieć, ale nie
+naprawia jego nadgorliwości — model bywa, że i tak zwraca stałą wysoką pewność.
+
+## Pewność niewiarygodna (brak różnicowania)
+
+Gdy model zwróci wysoką pewność (≥0.9) dla większości segmentów — także gdy
+rozbije ją na np. 0.95 i 0.9 — znaczy to, że w ogóle nie różnicował pewności.
+`_apply_temporal_quality_checks` oznacza wtedy te segmenty flagą
+`AnalysisSegment.confidence_unreliable` i obcina je do 0.64. UI nie pokazuje
+wówczas mylącego procentu, tylko etykietę „niewiarygodna".
+
+Gdy ≥60% segmentów jest niewiarygodnych (`analysis_confidence_unreliable`), strona
+analizy NIE listuje ich pojedynczo jako alarmów „Wymaga sprawdzenia" — pokazuje
+jedną spokojną notkę na poziomie analizy: model nie różnicował pewności, liczby
+są orientacyjne, zalecany przegląd całości. Dzięki temu trafna analiza nie tonie
+w kilkunastu fałszywych alarmach. Segmenty merytorycznie `niepewne` nadal trafiają
+do przeglądu osobno.
 
 ## Kalibracja confidence
 

@@ -30,6 +30,7 @@ from .services import (
     run_anonymization_in_background,
     run_analysis_in_background,
     segments_needing_review,
+    analysis_confidence_unreliable,
 )
 
 
@@ -592,9 +593,12 @@ def analysis_detail(request, pk):
             "summary": analysis_summary(analysis),
             "cost": cost,
             "needs_review": needs_review,
+            "confidence_plateau": analysis_confidence_unreliable(analysis),
             "operation": operation,
             "operations": operations,
             "approved_count": approved_count,
+            "model_choices": settings.GEMINI_VIDEO_MODEL_CHOICES,
+            "selected_model": analysis.model_name or settings.GEMINI_VIDEO_MODEL,
         },
     )
 
